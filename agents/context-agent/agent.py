@@ -305,27 +305,48 @@ class ContextAgent:
         except Exception:
             pass  # not a JWT — that's fine
 
+        # Build an mTLS session if a client cert source is available.
+        import tempfile, os
+        from google.auth.transport import mtls as _mtls
+
+        mtls_used = False
+        session = _requests.Session()
+        try:
+            if _mtls.has_default_client_cert_source():
+                cert_pem, key_pem = _mtls.default_client_cert_source()()
+                # requests needs cert+key as files or a combined PEM file.
+                tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pem")
+                tmp.write(cert_pem + key_pem)
+                tmp.flush()
+                tmp.close()
+                session.cert = tmp.name
+                mtls_used = True
+        except Exception as exc:
+            mtls_used = f"mtls setup failed: {exc}"
+
+        # Use the mTLS endpoint when mTLS is active.
+        base = "https://oauth2.mtls.googleapis.com" if mtls_used is True else "https://oauth2.googleapis.com"
+
         # Call tokeninfo for both access_token and id_token forms.
         tokeninfo_access, tokeninfo_id = None, None
         try:
-            r = _requests.get(
-                "https://oauth2.googleapis.com/tokeninfo",
-                params={"access_token": token},
-                timeout=10,
-            )
+            r = session.get(f"{base}/tokeninfo", params={"access_token": token}, timeout=10)
             tokeninfo_access = {"status": r.status_code, "body": r.json()}
         except Exception as exc:
             tokeninfo_access = {"error": str(exc)}
 
         try:
-            r = _requests.get(
-                "https://oauth2.googleapis.com/tokeninfo",
-                params={"id_token": token},
-                timeout=10,
-            )
+            r = session.get(f"{base}/tokeninfo", params={"id_token": token}, timeout=10)
             tokeninfo_id = {"status": r.status_code, "body": r.json()}
         except Exception as exc:
             tokeninfo_id = {"error": str(exc)}
+
+        # Clean up temp cert file.
+        if mtls_used is True:
+            try:
+                os.unlink(session.cert)
+            except Exception:
+                pass
 
         # Determine bound/unbound from JWT claims or tokeninfo.
         aud = (jwt_claims or {}).get("aud") or (tokeninfo_access or {}).get("body", {}).get("aud", "")
@@ -333,6 +354,7 @@ class ContextAgent:
 
         return _ok(
             endpoint=self._last_request,
+            mtls=mtls_used,
             token=token,
             token_type=creds.__class__.__name__,
             jwt_claims=jwt_claims,
