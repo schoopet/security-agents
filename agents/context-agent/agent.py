@@ -120,6 +120,19 @@ def _discover_own_resource() -> tuple[str | None, dict]:
 
 
 # ---------------------------------------------------------------------------
+# REST URL helper
+# ---------------------------------------------------------------------------
+
+_AIPLATFORM_BASE = "https://{location}-aiplatform.googleapis.com/v1beta1"
+
+def _rest_url(method: str, path: str, location: str = LOCATION) -> str:
+    base = _AIPLATFORM_BASE.format(location=location)
+    url = f"{base}/{path}"
+    print(f"[REST] {method} {url}")
+    return url
+
+
+# ---------------------------------------------------------------------------
 # JSON helpers
 # ---------------------------------------------------------------------------
 
@@ -281,7 +294,8 @@ class ContextAgent:
         engine, err = self._resolve_engine(engine_ref)
         if err:
             return _err(err)
-        print(f"[REST] CREATE session engine={engine!r} user_id={user_id!r}")
+        _rest_url("POST", f"{engine}/sessions")
+        print(f"[REST] CREATE session user_id={user_id!r}")
         op = self._ae.create_session(
             name=engine,
             user_id=user_id,
@@ -299,7 +313,7 @@ class ContextAgent:
         if err:
             return _err(err)
         resource = self._session_name(engine, session_id)
-        print(f"[REST] GET session resource={resource!r}")
+        _rest_url("GET", resource)
         session = self._ae.get_session(name=resource)
         print(f"[REST] GET session response={_to_dict(session)!r}")
         return _ok(session=_to_dict(session))
@@ -316,7 +330,8 @@ class ContextAgent:
         config = {}
         if user_id:
             config["filter"] = f'user_id="{user_id}"'
-        print(f"[REST] LIST sessions engine={engine!r} config={config!r}")
+        _rest_url("GET", f"{engine}/sessions")
+        print(f"[REST] LIST sessions filter={config.get('filter')!r}")
         sessions = list(self._ae.list_sessions(name=engine, config=config or None))
         print(f"[REST] LIST sessions count={len(sessions)}")
         return _ok(count=len(sessions), sessions=[_to_dict(s) for s in sessions])
@@ -330,7 +345,7 @@ class ContextAgent:
         if err:
             return _err(err)
         resource = self._session_name(engine, session_id)
-        print(f"[REST] DELETE session resource={resource!r}")
+        _rest_url("DELETE", resource)
         op = self._ae.delete_session(name=resource)
         print(f"[REST] DELETE session response={_to_dict(op)!r}")
         return _ok(deleted=session_id, operation=_to_dict(op))
@@ -350,7 +365,8 @@ class ContextAgent:
             return _err(err)
 
         resource = self._session_name(engine, session_id)
-        print(f"[REST] APPEND session event resource={resource!r} author={author!r} text={text!r}")
+        _rest_url("POST", f"{resource}:appendEvent")
+        print(f"[REST] APPEND session event author={author!r} text={text!r}")
         resp = self._ae.append_session_event(
             name=resource,
             author=author,
@@ -370,7 +386,7 @@ class ContextAgent:
         if err:
             return _err(err)
         resource = self._session_name(engine, session_id)
-        print(f"[REST] LIST session events resource={resource!r}")
+        _rest_url("GET", f"{resource}/events")
         events = list(self._ae.list_session_events(name=resource))
         print(f"[REST] LIST session events count={len(events)}")
         return _ok(session_id=session_id, count=len(events), events=[_to_dict(e) for e in events])
@@ -387,7 +403,8 @@ class ContextAgent:
         engine, err = self._resolve_engine(engine_ref)
         if err:
             return _err(err)
-        print(f"[REST] CREATE memory engine={engine!r} user_id={user_id!r} fact={fact!r}")
+        _rest_url("POST", f"{engine}/memories")
+        print(f"[REST] CREATE memory user_id={user_id!r} fact={fact!r}")
         op = self._ae.create_memory(
             name=engine,
             fact=fact,
@@ -405,7 +422,7 @@ class ContextAgent:
         if err:
             return _err(err)
         resource = self._memory_name(engine, memory_id)
-        print(f"[REST] GET memory resource={resource!r}")
+        _rest_url("GET", resource)
         memory = self._ae.get_memory(name=resource)
         print(f"[REST] GET memory response={_to_dict(memory)!r}")
         return _ok(memory=_to_dict(memory))
@@ -422,7 +439,8 @@ class ContextAgent:
         config = {}
         if user_id:
             config["filter"] = f'scope.user_id="{user_id}"'
-        print(f"[REST] LIST memories engine={engine!r} config={config!r}")
+        _rest_url("GET", f"{engine}/memories")
+        print(f"[REST] LIST memories filter={config.get('filter')!r}")
         memories = list(self._ae.list_memories(name=engine, config=config or None))
         print(f"[REST] LIST memories count={len(memories)}")
         return _ok(count=len(memories), memories=[_to_dict(m) for m in memories])
@@ -436,7 +454,7 @@ class ContextAgent:
         if err:
             return _err(err)
         resource = self._memory_name(engine, memory_id)
-        print(f"[REST] DELETE memory resource={resource!r}")
+        _rest_url("DELETE", resource)
         op = self._ae.delete_memory(name=resource)
         print(f"[REST] DELETE memory response={_to_dict(op)!r}")
         return _ok(deleted=memory_id, operation=_to_dict(op))
@@ -452,7 +470,7 @@ class ContextAgent:
         engine, err = self._resolve_engine(engine_ref)
         if err:
             return _err(err)
-        print(f"[REST] CREATE sandbox engine={engine!r}")
+        _rest_url("POST", f"{engine}/sandboxEnvironments")
         op = self._ae.sandboxes.create(name=engine)
         print(f"[REST] CREATE sandbox response={_to_dict(op)!r}")
         return _ok(operation=_to_dict(op))
@@ -466,7 +484,7 @@ class ContextAgent:
         if err:
             return _err(err)
         resource = self._sandbox_name(engine, sandbox_id)
-        print(f"[REST] GET sandbox resource={resource!r}")
+        _rest_url("GET", resource)
         sb = self._ae.sandboxes.get(name=resource)
         print(f"[REST] GET sandbox response={_to_dict(sb)!r}")
         return _ok(sandbox=_to_dict(sb))
@@ -478,7 +496,7 @@ class ContextAgent:
         engine, err = self._resolve_engine(engine_ref)
         if err:
             return _err(err)
-        print(f"[REST] LIST sandboxes engine={engine!r}")
+        _rest_url("GET", f"{engine}/sandboxEnvironments")
         sandboxes = list(self._ae.sandboxes.list(name=engine))
         print(f"[REST] LIST sandboxes count={len(sandboxes)}")
         return _ok(count=len(sandboxes), sandboxes=[_to_dict(s) for s in sandboxes])
@@ -492,7 +510,7 @@ class ContextAgent:
         if err:
             return _err(err)
         resource = self._sandbox_name(engine, sandbox_id)
-        print(f"[REST] DELETE sandbox resource={resource!r}")
+        _rest_url("DELETE", resource)
         op = self._ae.sandboxes.delete(name=resource)
         print(f"[REST] DELETE sandbox response={_to_dict(op)!r}")
         return _ok(deleted=sandbox_id, operation=_to_dict(op))
@@ -512,7 +530,8 @@ class ContextAgent:
         except Exception as exc:
             return _err(f"base64 decode failed: {exc}")
         resource = self._sandbox_name(engine, sandbox_id)
-        print(f"[REST] EXEC sandbox resource={resource!r} code={code!r}")
+        _rest_url("POST", f"{resource}:executeCode")
+        print(f"[REST] EXEC sandbox code={code!r}")
         result = self._ae.sandboxes.execute_code(
             name=resource,
             input_data={"code": code},
@@ -536,7 +555,8 @@ class ContextAgent:
     def _call_vertex(self, model_id: str, prompt: str) -> str:
         try:
             from vertexai.generative_models import GenerativeModel
-            print(f"[REST] CALL vertex model={model_id!r} prompt={prompt!r}")
+            _rest_url("POST", f"publishers/google/models/{model_id}:generateContent")
+            print(f"[REST] CALL vertex prompt={prompt!r}")
             model = GenerativeModel(model_name=model_id)
             response = model.generate_content(prompt)
             print(f"[REST] CALL vertex response={response.text!r}")
