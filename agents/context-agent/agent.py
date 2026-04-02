@@ -34,6 +34,7 @@ Model calling (endpoint = model ID, full Vertex path, or https:// URL):
 
 Misc:
   self-inspect    — show env vars & resolved own resource name
+  token-info      — show the SDK's access token and tokeninfo (bound/unbound, scopes, SA)
   log             <message...>   — write a line to Cloud Logging (stdout)
   logapi          <message...>   — write a log entry via Cloud Logging API
   help
@@ -263,6 +264,7 @@ class ContextAgent:
             "sandbox-exec":    self._sandbox_exec,
             "call-model":      self._call_model,
             "self-inspect":    self._self_inspect,
+            "token-info":      self._token_info,
             "log":             self._log,
             "logapi":          self._logapi,
             "help":            lambda _: __doc__,
@@ -276,6 +278,50 @@ class ContextAgent:
     # ------------------------------------------------------------------
     # Self-inspection
     # ------------------------------------------------------------------
+
+    def _token_info(self, _args: str) -> str:
+        """token-info — fetch and inspect the access token the SDK is using."""
+        import google.auth
+        import google.auth.transport.requests
+        import requests as _requests
+
+        # Get the same credentials the SDK uses (ADC).
+        try:
+            creds, project = google.auth.default(
+                scopes=["https://www.googleapis.com/auth/cloud-platform"]
+            )
+            creds.refresh(google.auth.transport.requests.Request())
+            token = creds.token
+        except Exception as exc:
+            return _err(f"could not get credentials: {exc}", endpoint=self._last_request)
+
+        # Call tokeninfo to inspect the token.
+        try:
+            resp = _requests.get(
+                "https://oauth2.googleapis.com/tokeninfo",
+                params={"access_token": token},
+                timeout=10,
+            )
+            info = resp.json()
+        except Exception as exc:
+            return _err(f"tokeninfo call failed: {exc}", endpoint=self._last_request)
+
+        # Determine bound vs unbound: bound tokens have a specific 'aud' claim.
+        aud = info.get("aud", "")
+        bound = bool(aud and not aud.startswith("https://"))
+
+        return _ok(
+            endpoint=self._last_request,
+            token=token,
+            token_type=creds.__class__.__name__,
+            service_account=info.get("email"),
+            scopes=info.get("scope"),
+            expires_in=info.get("expires_in"),
+            audience=aud or None,
+            bound=bound,
+            azp=info.get("azp"),
+            raw_tokeninfo=info,
+        )
 
     def _log(self, args: str) -> str:
         """log <message...> — write a line to Cloud Logging (stdout) and return it."""
