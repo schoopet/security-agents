@@ -146,8 +146,11 @@ def _err(msg: str, **fields) -> str:
 
 class ContextAgent:
 
+    def __init__(self, base_url: str | None = None):
+        self._base_url = base_url
+
     def set_up(self):
-        self._client = vertexai.Client(project=PROJECT_ID, location=LOCATION)
+        self._client = _make_client(self._base_url)
         self._ae = self._client.agent_engines
         print("[ContextAgent] Agent is ready.")
 
@@ -501,10 +504,19 @@ class ContextAgent:
 # Deploy / query helpers
 # ---------------------------------------------------------------------------
 
-def deploy():
-    client = vertexai.Client(project=PROJECT_ID, location=LOCATION)
+def _make_client(base_url: str | None = None) -> vertexai.Client:
+    """Create a vertexai.Client, optionally pointing at a custom base URL."""
+    from google.genai.types import HttpOptions
+    kwargs = {"project": PROJECT_ID, "location": LOCATION}
+    if base_url:
+        kwargs["http_options"] = HttpOptions(baseUrl=base_url)
+    return vertexai.Client(**kwargs)
+
+
+def deploy(base_url: str | None = None):
+    client = _make_client(base_url)
     remote_agent = client.agent_engines.create(
-        agent=ContextAgent(),
+        agent=ContextAgent(base_url=base_url),
         config={
             "display_name": "context-agent",
             "identity_type": "AGENT_IDENTITY",
@@ -524,8 +536,8 @@ def deploy():
     return remote_agent
 
 
-def query_remote(resource_name: str, user_input: str):
-    client = vertexai.Client(project=PROJECT_ID, location=LOCATION)
+def query_remote(resource_name: str, user_input: str, base_url: str | None = None):
+    client = _make_client(base_url)
     remote_agent = client.agent_engines.get(name=resource_name)
     response = remote_agent.query(input=user_input)
     print(f"Remote response: {response}")
@@ -533,4 +545,11 @@ def query_remote(resource_name: str, user_input: str):
 
 
 if __name__ == "__main__":
-    deploy()
+    import sys as _sys
+    # Usage: agent.py [--base-url <url>]
+    _base_url = None
+    _args = _sys.argv[1:]
+    if "--base-url" in _args:
+        _idx = _args.index("--base-url")
+        _base_url = _args[_idx + 1]
+    deploy(base_url=_base_url)

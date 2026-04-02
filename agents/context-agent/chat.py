@@ -2,7 +2,7 @@
 Interactive shell against a deployed Context Agent Engine.
 
 Usage:
-    python chat.py <resource_name>
+    python chat.py <resource_name> [--base-url <url>]
 
 Local commands (handled by this client):
     use <resource_name>   — set a default engine for session/memory commands
@@ -64,8 +64,12 @@ def _pretty(raw: str, pretty: bool) -> str:
         return raw
 
 
-def chat(resource_name: str):
-    client = vertexai.Client(project=PROJECT_ID, location=LOCATION)
+def chat(resource_name: str, base_url: str | None = None):
+    from google.genai.types import HttpOptions
+    kwargs = {"project": PROJECT_ID, "location": LOCATION}
+    if base_url:
+        kwargs["http_options"] = HttpOptions(baseUrl=base_url)
+    client = vertexai.Client(**kwargs)
     agent = client.agent_engines.get(name=resource_name)
     print(f"[*] Connected to {resource_name}")
     print("[*] Type 'help' for agent commands, or see docstring for local commands.\n")
@@ -130,7 +134,13 @@ def chat(resource_name: str):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python chat.py <resource_name>")
+    _args = sys.argv[1:]
+    _base_url = None
+    if "--base-url" in _args:
+        _idx = _args.index("--base-url")
+        _base_url = _args[_idx + 1]
+        _args = _args[:_idx] + _args[_idx + 2:]
+    if len(_args) != 1:
+        print("Usage: python chat.py <resource_name> [--base-url <url>]")
         sys.exit(1)
-    chat(sys.argv[1])
+    chat(_args[0], base_url=_base_url)
