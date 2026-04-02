@@ -34,6 +34,7 @@ Model calling (endpoint = model ID, full Vertex path, or https:// URL):
 
 Misc:
   self-inspect    — show env vars & resolved own resource name
+  log             <message...>   — write a line to Cloud Logging (stdout)
   help
 """
 
@@ -150,6 +151,16 @@ class ContextAgent:
         self._base_url = base_url
 
     def set_up(self):
+        import http.client
+        import logging
+
+        # Log the raw HTTP wire traffic so REST requests appear in Cloud Logging.
+        http.client.HTTPSConnection.debuglevel = 1
+        http.client.HTTPConnection.debuglevel = 1
+        logging.basicConfig()
+        for logger_name in ("httpx", "urllib3", "urllib3.connectionpool"):
+            logging.getLogger(logger_name).setLevel(logging.DEBUG)
+
         from google.genai.types import HttpOptions
         kwargs: dict = {"project": PROJECT_ID, "location": LOCATION}
         if self._base_url:
@@ -235,6 +246,7 @@ class ContextAgent:
             "sandbox-exec":    self._sandbox_exec,
             "call-model":      self._call_model,
             "self-inspect":    self._self_inspect,
+            "log":             self._log,
             "help":            lambda _: __doc__,
             "?":               lambda _: __doc__,
         }
@@ -246,6 +258,12 @@ class ContextAgent:
     # ------------------------------------------------------------------
     # Self-inspection
     # ------------------------------------------------------------------
+
+    def _log(self, args: str) -> str:
+        """log <message...> — write a line to Cloud Logging (stdout) and return it."""
+        msg = args.strip() or "(empty log message)"
+        print(f"[LOG] {msg}")
+        return _ok(logged=msg)
 
     def _self_inspect(self, _args: str) -> str:
         own, inspection = _discover_own_resource()
@@ -263,11 +281,13 @@ class ContextAgent:
         engine, err = self._resolve_engine(engine_ref)
         if err:
             return _err(err)
+        print(f"[REST] CREATE session engine={engine!r} user_id={user_id!r}")
         op = self._ae.create_session(
             name=engine,
             user_id=user_id,
             config={"wait_for_completion": True},
         )
+        print(f"[REST] CREATE session response={_to_dict(op)!r}")
         return _ok(operation=_to_dict(op))
 
     def _session_get(self, args: str) -> str:
@@ -278,7 +298,10 @@ class ContextAgent:
         engine, err = self._resolve_engine(engine_ref)
         if err:
             return _err(err)
-        session = self._ae.get_session(name=self._session_name(engine, session_id))
+        resource = self._session_name(engine, session_id)
+        print(f"[REST] GET session resource={resource!r}")
+        session = self._ae.get_session(name=resource)
+        print(f"[REST] GET session response={_to_dict(session)!r}")
         return _ok(session=_to_dict(session))
 
     def _session_list(self, args: str) -> str:
@@ -293,7 +316,9 @@ class ContextAgent:
         config = {}
         if user_id:
             config["filter"] = f'user_id="{user_id}"'
+        print(f"[REST] LIST sessions engine={engine!r} config={config!r}")
         sessions = list(self._ae.list_sessions(name=engine, config=config or None))
+        print(f"[REST] LIST sessions count={len(sessions)}")
         return _ok(count=len(sessions), sessions=[_to_dict(s) for s in sessions])
 
     def _session_delete(self, args: str) -> str:
@@ -304,7 +329,10 @@ class ContextAgent:
         engine, err = self._resolve_engine(engine_ref)
         if err:
             return _err(err)
-        op = self._ae.delete_session(name=self._session_name(engine, session_id))
+        resource = self._session_name(engine, session_id)
+        print(f"[REST] DELETE session resource={resource!r}")
+        op = self._ae.delete_session(name=resource)
+        print(f"[REST] DELETE session response={_to_dict(op)!r}")
         return _ok(deleted=session_id, operation=_to_dict(op))
 
     def _session_append(self, args: str) -> str:
@@ -321,13 +349,16 @@ class ContextAgent:
         if err:
             return _err(err)
 
+        resource = self._session_name(engine, session_id)
+        print(f"[REST] APPEND session event resource={resource!r} author={author!r} text={text!r}")
         resp = self._ae.append_session_event(
-            name=self._session_name(engine, session_id),
+            name=resource,
             author=author,
             invocation_id=str(uuid.uuid4()),
             timestamp=datetime.now(timezone.utc),
             config={"content": Content(role=author, parts=[Part(text=text)])},
         )
+        print(f"[REST] APPEND session event response={_to_dict(resp)!r}")
         return _ok(response=_to_dict(resp))
 
     def _session_events(self, args: str) -> str:
@@ -338,7 +369,10 @@ class ContextAgent:
         engine, err = self._resolve_engine(engine_ref)
         if err:
             return _err(err)
-        events = list(self._ae.list_session_events(name=self._session_name(engine, session_id)))
+        resource = self._session_name(engine, session_id)
+        print(f"[REST] LIST session events resource={resource!r}")
+        events = list(self._ae.list_session_events(name=resource))
+        print(f"[REST] LIST session events count={len(events)}")
         return _ok(session_id=session_id, count=len(events), events=[_to_dict(e) for e in events])
 
     # ------------------------------------------------------------------
@@ -353,11 +387,13 @@ class ContextAgent:
         engine, err = self._resolve_engine(engine_ref)
         if err:
             return _err(err)
+        print(f"[REST] CREATE memory engine={engine!r} user_id={user_id!r} fact={fact!r}")
         op = self._ae.create_memory(
             name=engine,
             fact=fact,
             scope={"user_id": user_id},
         )
+        print(f"[REST] CREATE memory response={_to_dict(op)!r}")
         return _ok(operation=_to_dict(op))
 
     def _memory_get(self, args: str) -> str:
@@ -368,7 +404,10 @@ class ContextAgent:
         engine, err = self._resolve_engine(engine_ref)
         if err:
             return _err(err)
-        memory = self._ae.get_memory(name=self._memory_name(engine, memory_id))
+        resource = self._memory_name(engine, memory_id)
+        print(f"[REST] GET memory resource={resource!r}")
+        memory = self._ae.get_memory(name=resource)
+        print(f"[REST] GET memory response={_to_dict(memory)!r}")
         return _ok(memory=_to_dict(memory))
 
     def _memory_list(self, args: str) -> str:
@@ -383,7 +422,9 @@ class ContextAgent:
         config = {}
         if user_id:
             config["filter"] = f'scope.user_id="{user_id}"'
+        print(f"[REST] LIST memories engine={engine!r} config={config!r}")
         memories = list(self._ae.list_memories(name=engine, config=config or None))
+        print(f"[REST] LIST memories count={len(memories)}")
         return _ok(count=len(memories), memories=[_to_dict(m) for m in memories])
 
     def _memory_delete(self, args: str) -> str:
@@ -394,7 +435,10 @@ class ContextAgent:
         engine, err = self._resolve_engine(engine_ref)
         if err:
             return _err(err)
-        op = self._ae.delete_memory(name=self._memory_name(engine, memory_id))
+        resource = self._memory_name(engine, memory_id)
+        print(f"[REST] DELETE memory resource={resource!r}")
+        op = self._ae.delete_memory(name=resource)
+        print(f"[REST] DELETE memory response={_to_dict(op)!r}")
         return _ok(deleted=memory_id, operation=_to_dict(op))
 
     # ------------------------------------------------------------------
@@ -408,7 +452,9 @@ class ContextAgent:
         engine, err = self._resolve_engine(engine_ref)
         if err:
             return _err(err)
+        print(f"[REST] CREATE sandbox engine={engine!r}")
         op = self._ae.sandboxes.create(name=engine)
+        print(f"[REST] CREATE sandbox response={_to_dict(op)!r}")
         return _ok(operation=_to_dict(op))
 
     def _sandbox_get(self, args: str) -> str:
@@ -419,7 +465,10 @@ class ContextAgent:
         engine, err = self._resolve_engine(engine_ref)
         if err:
             return _err(err)
-        sb = self._ae.sandboxes.get(name=self._sandbox_name(engine, sandbox_id))
+        resource = self._sandbox_name(engine, sandbox_id)
+        print(f"[REST] GET sandbox resource={resource!r}")
+        sb = self._ae.sandboxes.get(name=resource)
+        print(f"[REST] GET sandbox response={_to_dict(sb)!r}")
         return _ok(sandbox=_to_dict(sb))
 
     def _sandbox_list(self, args: str) -> str:
@@ -429,7 +478,9 @@ class ContextAgent:
         engine, err = self._resolve_engine(engine_ref)
         if err:
             return _err(err)
+        print(f"[REST] LIST sandboxes engine={engine!r}")
         sandboxes = list(self._ae.sandboxes.list(name=engine))
+        print(f"[REST] LIST sandboxes count={len(sandboxes)}")
         return _ok(count=len(sandboxes), sandboxes=[_to_dict(s) for s in sandboxes])
 
     def _sandbox_delete(self, args: str) -> str:
@@ -440,7 +491,10 @@ class ContextAgent:
         engine, err = self._resolve_engine(engine_ref)
         if err:
             return _err(err)
-        op = self._ae.sandboxes.delete(name=self._sandbox_name(engine, sandbox_id))
+        resource = self._sandbox_name(engine, sandbox_id)
+        print(f"[REST] DELETE sandbox resource={resource!r}")
+        op = self._ae.sandboxes.delete(name=resource)
+        print(f"[REST] DELETE sandbox response={_to_dict(op)!r}")
         return _ok(deleted=sandbox_id, operation=_to_dict(op))
 
     def _sandbox_exec(self, args: str) -> str:
@@ -457,10 +511,13 @@ class ContextAgent:
             code = base64.b64decode(b64).decode("utf-8")
         except Exception as exc:
             return _err(f"base64 decode failed: {exc}")
+        resource = self._sandbox_name(engine, sandbox_id)
+        print(f"[REST] EXEC sandbox resource={resource!r} code={code!r}")
         result = self._ae.sandboxes.execute_code(
-            name=self._sandbox_name(engine, sandbox_id),
+            name=resource,
             input_data={"code": code},
         )
+        print(f"[REST] EXEC sandbox response={_to_dict(result)!r}")
         return _ok(result=_to_dict(result))
 
     # ------------------------------------------------------------------
@@ -479,8 +536,10 @@ class ContextAgent:
     def _call_vertex(self, model_id: str, prompt: str) -> str:
         try:
             from vertexai.generative_models import GenerativeModel
+            print(f"[REST] CALL vertex model={model_id!r} prompt={prompt!r}")
             model = GenerativeModel(model_name=model_id)
             response = model.generate_content(prompt)
+            print(f"[REST] CALL vertex response={response.text!r}")
             return _ok(endpoint=model_id, response=response.text)
         except Exception as exc:
             return _err(str(exc), endpoint=model_id)
