@@ -279,7 +279,7 @@ class ContextAgent:
         """log <message...> — write a line to Cloud Logging (stdout) and return it."""
         msg = args.strip() or "(empty log message)"
         print(f"[LOG] {msg}")
-        return _ok(logged=msg)
+        return _ok(endpoint=self._last_request, logged=msg)
 
     def _self_inspect(self, _args: str) -> str:
         own, inspection = _discover_own_resource()
@@ -526,10 +526,11 @@ class ContextAgent:
             response = model.generate_content(prompt)
             return _ok(endpoint=self._last_request, response=response.text)
         except Exception as exc:
-            return _err(str(exc), endpoint=model_id)
+            return _err(str(exc), endpoint=self._last_request)
 
     def _call_http(self, url: str, prompt: str) -> str:
-        import json as _json, urllib.request
+        import json as _json
+        import requests as _requests
         import google.auth, google.auth.transport.requests
 
         try:
@@ -541,21 +542,19 @@ class ContextAgent:
         except Exception:
             token = None
 
-        payload = _json.dumps({"instances": [{"content": prompt}]}).encode()
+        payload = _json.dumps({"instances": [{"content": prompt}]})
         headers = {"Content-Type": "application/json"}
         if token:
             headers["Authorization"] = f"Bearer {token}"
         try:
-            req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                body = resp.read().decode()
+            resp = _requests.post(url, data=payload, headers=headers, timeout=60)
             try:
-                body = _json.loads(body)
+                body = resp.json()
             except Exception:
-                pass
-            return _ok(endpoint=url, response=body)
+                body = resp.text
+            return _ok(endpoint=self._last_request, response=body)
         except Exception as exc:
-            return _err(str(exc), endpoint=url)
+            return _err(str(exc), endpoint=self._last_request)
 
 
 # ---------------------------------------------------------------------------
