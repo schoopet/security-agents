@@ -519,24 +519,32 @@ class ContextAgent:
 # Deploy / query helpers
 # ---------------------------------------------------------------------------
 
-def _make_client(base_url: str | None = None) -> vertexai.Client:
+def _make_client(
+    project: str = PROJECT_ID,
+    location: str = LOCATION,
+    base_url: str | None = None,
+) -> vertexai.Client:
     """Create a vertexai.Client, optionally pointing at a custom base URL."""
     from google.genai.types import HttpOptions
-    kwargs = {"project": PROJECT_ID, "location": LOCATION}
+    kwargs: dict = {"project": project, "location": location}
     if base_url:
         kwargs["http_options"] = HttpOptions(baseUrl=base_url)
     client = vertexai.Client(**kwargs)
     try:
         api_client = client._api_client
-        print(f"[_make_client] base_url param: {base_url!r}")
+        print(f"[_make_client] project={project!r} location={location!r} base_url={base_url!r}")
         print(f"[_make_client] api_client.custom_base_url: {getattr(api_client, 'custom_base_url', '<not found>')!r}")
     except Exception as exc:
         print(f"[_make_client] Could not inspect api_client: {exc}")
     return client
 
 
-def deploy(base_url: str | None = None):
-    client = _make_client(base_url)
+def deploy(
+    project: str = PROJECT_ID,
+    location: str = LOCATION,
+    base_url: str | None = None,
+):
+    client = _make_client(project=project, location=location, base_url=base_url)
     remote_agent = client.agent_engines.create(
         agent=ContextAgent(base_url=base_url),
         config={
@@ -558,8 +566,14 @@ def deploy(base_url: str | None = None):
     return remote_agent
 
 
-def query_remote(resource_name: str, user_input: str, base_url: str | None = None):
-    client = _make_client(base_url)
+def query_remote(
+    resource_name: str,
+    user_input: str,
+    project: str = PROJECT_ID,
+    location: str = LOCATION,
+    base_url: str | None = None,
+):
+    client = _make_client(project=project, location=location, base_url=base_url)
     remote_agent = client.agent_engines.get(name=resource_name)
     response = remote_agent.query(input=user_input)
     print(f"Remote response: {response}")
@@ -568,10 +582,18 @@ def query_remote(resource_name: str, user_input: str, base_url: str | None = Non
 
 if __name__ == "__main__":
     import sys as _sys
-    # Usage: agent.py [--base-url <url>]
-    _base_url = None
+
+    def _pop_flag(args: list, flag: str) -> str | None:
+        if flag in args:
+            idx = args.index(flag)
+            val = args[idx + 1]
+            del args[idx:idx + 2]
+            return val
+        return None
+
+    # Usage: agent.py [--project <id>] [--location <loc>] [--base-url <url>]
     _args = _sys.argv[1:]
-    if "--base-url" in _args:
-        _idx = _args.index("--base-url")
-        _base_url = _args[_idx + 1]
-    deploy(base_url=_base_url)
+    _project  = _pop_flag(_args, "--project")  or PROJECT_ID
+    _location = _pop_flag(_args, "--location") or LOCATION
+    _base_url = _pop_flag(_args, "--base-url")
+    deploy(project=_project, location=_location, base_url=_base_url)

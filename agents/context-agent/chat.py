@@ -2,7 +2,7 @@
 Interactive shell against a deployed Context Agent Engine.
 
 Usage:
-    python chat.py <resource_name> [--base-url <url>]
+    python chat.py <resource_name> [--project <id>] [--location <loc>] [--base-url <url>]
 
 Local commands (handled by this client):
     use <resource_name>   — set a default engine for session/memory commands
@@ -64,9 +64,14 @@ def _pretty(raw: str, pretty: bool) -> str:
         return raw
 
 
-def chat(resource_name: str, base_url: str | None = None):
+def chat(
+    resource_name: str,
+    project: str = PROJECT_ID,
+    location: str = LOCATION,
+    base_url: str | None = None,
+):
     from google.genai.types import HttpOptions
-    kwargs = {"project": PROJECT_ID, "location": LOCATION}
+    kwargs: dict = {"project": project, "location": location}
     if base_url:
         kwargs["http_options"] = HttpOptions(baseUrl=base_url)
     client = vertexai.Client(**kwargs)
@@ -134,13 +139,19 @@ def chat(resource_name: str, base_url: str | None = None):
 
 
 if __name__ == "__main__":
+    def _pop_flag(args: list, flag: str) -> str | None:
+        if flag in args:
+            idx = args.index(flag)
+            val = args[idx + 1]
+            del args[idx:idx + 2]
+            return val
+        return None
+
     _args = sys.argv[1:]
-    _base_url = None
-    if "--base-url" in _args:
-        _idx = _args.index("--base-url")
-        _base_url = _args[_idx + 1]
-        _args = _args[:_idx] + _args[_idx + 2:]
+    _project  = _pop_flag(_args, "--project")  or PROJECT_ID
+    _location = _pop_flag(_args, "--location") or LOCATION
+    _base_url = _pop_flag(_args, "--base-url")
     if len(_args) != 1:
-        print("Usage: python chat.py <resource_name> [--base-url <url>]")
+        print("Usage: python chat.py <resource_name> [--project <id>] [--location <loc>] [--base-url <url>]")
         sys.exit(1)
-    chat(_args[0], base_url=_base_url)
+    chat(_args[0], project=_project, location=_location, base_url=_base_url)
