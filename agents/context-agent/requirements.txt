@@ -1,0 +1,6 @@
+google-cloud-aiplatform[agent_engines]
+google-genai
+cloudpickle
+pydantic
+google-auth[cryptography]
+google-cloud-storage
