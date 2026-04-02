@@ -161,7 +161,7 @@ class ContextAgent:
         _orig_adapter_send = requests.adapters.HTTPAdapter.send
 
         def _adapter_send(adapter, request, **kwargs):
-            _agent._last_request = f"{request.method} {request.url}"
+            _agent._last_request = f">> CAPTURED: {request.method} {request.url}"
             return _orig_adapter_send(adapter, request, **kwargs)
 
         requests.adapters.HTTPAdapter.send = _adapter_send
