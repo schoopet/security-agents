@@ -226,7 +226,7 @@ class ContextAgent:
         try:
             result = self._dispatch(cmd, args)
         except Exception as exc:
-            result = _err(str(exc), exception_type=type(exc).__name__)
+            result = _err(str(exc), exception_type=type(exc).__name__, endpoint=self._last_request)
 
         print(f"[ContextAgent.query] response={result!r}")
         return result
