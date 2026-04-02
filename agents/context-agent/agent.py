@@ -153,17 +153,27 @@ class ContextAgent:
 
     def set_up(self):
         import httpx
+        import requests
         from google.genai.types import HttpOptions
 
-        # Intercept the actual httpx request so we capture the real URL the SDK calls.
+        # Patch both httpx and requests so we capture whichever the SDK actually uses.
         _agent = self
-        _original_send = httpx.Client.send
 
-        def _capturing_send(client, request, *args, **kwargs):
-            _agent._last_request = f"{request.method} {request.url}"
-            return _original_send(client, request, *args, **kwargs)
+        _orig_httpx_send = httpx.Client.send
 
-        httpx.Client.send = _capturing_send
+        def _httpx_send(client, request, *args, **kwargs):
+            _agent._last_request = f"[httpx] {request.method} {request.url}"
+            return _orig_httpx_send(client, request, *args, **kwargs)
+
+        httpx.Client.send = _httpx_send
+
+        _orig_requests_send = requests.Session.send
+
+        def _requests_send(session, request, **kwargs):
+            _agent._last_request = f"[requests] {request.method} {request.url}"
+            return _orig_requests_send(session, request, **kwargs)
+
+        requests.Session.send = _requests_send
         kwargs: dict = {"project": PROJECT_ID, "location": LOCATION}
         if self._base_url:
             kwargs["http_options"] = HttpOptions(baseUrl=self._base_url)
