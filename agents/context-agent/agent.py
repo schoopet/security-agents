@@ -152,28 +152,19 @@ class ContextAgent:
         self._last_request: str | None = None  # set by httpx hook after each SDK call
 
     def set_up(self):
-        import httpx
-        import requests
         from google.genai.types import HttpOptions
 
-        # Patch both httpx and requests so we capture whichever the SDK actually uses.
+        # Patch HTTPAdapter.send — the lowest level that every requests call goes through.
+        import requests.adapters
         _agent = self
 
-        _orig_httpx_send = httpx.Client.send
+        _orig_adapter_send = requests.adapters.HTTPAdapter.send
 
-        def _httpx_send(client, request, *args, **kwargs):
-            _agent._last_request = f"[httpx] {request.method} {request.url}"
-            return _orig_httpx_send(client, request, *args, **kwargs)
+        def _adapter_send(adapter, request, **kwargs):
+            _agent._last_request = f"{request.method} {request.url}"
+            return _orig_adapter_send(adapter, request, **kwargs)
 
-        httpx.Client.send = _httpx_send
-
-        _orig_requests_send = requests.Session.send
-
-        def _requests_send(session, request, **kwargs):
-            _agent._last_request = f"[requests] {request.method} {request.url}"
-            return _orig_requests_send(session, request, **kwargs)
-
-        requests.Session.send = _requests_send
+        requests.adapters.HTTPAdapter.send = _adapter_send
         kwargs: dict = {"project": PROJECT_ID, "location": LOCATION}
         if self._base_url:
             kwargs["http_options"] = HttpOptions(baseUrl=self._base_url)
