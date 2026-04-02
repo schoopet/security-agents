@@ -152,6 +152,9 @@ if __name__ == "__main__":
     _location = _pop_flag(_args, "--location") or LOCATION
     _base_url = _pop_flag(_args, "--base-url")
     if len(_args) != 1:
-        print("Usage: python chat.py <resource_name> [--project <id>] [--location <loc>] [--base-url <url>]")
+        print("Usage: python chat.py <resource_name_or_id> [--project <id>] [--location <loc>] [--base-url <url>]")
         sys.exit(1)
-    chat(_args[0], project=_project, location=_location, base_url=_base_url)
+    _resource = _args[0]
+    if "/" not in _resource:
+        _resource = f"projects/{_project}/locations/{_location}/reasoningEngines/{_resource}"
+    chat(_resource, project=_project, location=_location, base_url=_base_url)
