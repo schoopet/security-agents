@@ -295,32 +295,51 @@ class ContextAgent:
         except Exception as exc:
             return _err(f"could not get credentials: {exc}", endpoint=self._last_request)
 
-        # Call tokeninfo to inspect the token.
+        # Decode JWT claims without verification (works even if tokeninfo rejects it).
+        import base64, json as _json
+        jwt_claims = None
         try:
-            resp = _requests.get(
+            payload_b64 = token.split(".")[1]
+            padding = 4 - len(payload_b64) % 4
+            jwt_claims = _json.loads(base64.urlsafe_b64decode(payload_b64 + "=" * padding))
+        except Exception:
+            pass  # not a JWT — that's fine
+
+        # Call tokeninfo for both access_token and id_token forms.
+        tokeninfo_access, tokeninfo_id = None, None
+        try:
+            r = _requests.get(
                 "https://oauth2.googleapis.com/tokeninfo",
                 params={"access_token": token},
                 timeout=10,
             )
-            info = resp.json()
+            tokeninfo_access = {"status": r.status_code, "body": r.json()}
         except Exception as exc:
-            return _err(f"tokeninfo call failed: {exc}", endpoint=self._last_request)
+            tokeninfo_access = {"error": str(exc)}
 
-        # Determine bound vs unbound: bound tokens have a specific 'aud' claim.
-        aud = info.get("aud", "")
-        bound = bool(aud and not aud.startswith("https://"))
+        try:
+            r = _requests.get(
+                "https://oauth2.googleapis.com/tokeninfo",
+                params={"id_token": token},
+                timeout=10,
+            )
+            tokeninfo_id = {"status": r.status_code, "body": r.json()}
+        except Exception as exc:
+            tokeninfo_id = {"error": str(exc)}
+
+        # Determine bound/unbound from JWT claims or tokeninfo.
+        aud = (jwt_claims or {}).get("aud") or (tokeninfo_access or {}).get("body", {}).get("aud", "")
+        bound = bool(aud and not str(aud).startswith("https://"))
 
         return _ok(
             endpoint=self._last_request,
             token=token,
             token_type=creds.__class__.__name__,
-            service_account=info.get("email"),
-            scopes=info.get("scope"),
-            expires_in=info.get("expires_in"),
-            audience=aud or None,
+            jwt_claims=jwt_claims,
             bound=bound,
-            azp=info.get("azp"),
-            raw_tokeninfo=info,
+            audience=aud or None,
+            tokeninfo_as_access_token=tokeninfo_access,
+            tokeninfo_as_id_token=tokeninfo_id,
         )
 
     def _log(self, args: str) -> str:
