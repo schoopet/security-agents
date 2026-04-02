@@ -154,22 +154,23 @@ class ContextAgent:
     def set_up(self):
         from google.genai.types import HttpOptions
 
-        # Patch HTTPAdapter.send — the lowest level that every requests call goes through.
-        import requests.adapters
-        _agent = self
-
-        _orig_adapter_send = requests.adapters.HTTPAdapter.send
-
-        def _adapter_send(adapter, request, **kwargs):
-            _agent._last_request = f">> CAPTURED: {request.method} {request.url}"
-            return _orig_adapter_send(adapter, request, **kwargs)
-
-        requests.adapters.HTTPAdapter.send = _adapter_send
         kwargs: dict = {"project": PROJECT_ID, "location": LOCATION}
         if self._base_url:
             kwargs["http_options"] = HttpOptions(baseUrl=self._base_url)
         self._client = vertexai.Client(**kwargs)
         self._ae = self._client.agent_engines
+
+        # Attach an httpx event hook to the actual client instance the SDK uses.
+        _agent = self
+        try:
+            httpx_client = self._client._api_client._httpx_client
+            def _log_request(request):
+                _agent._last_request = f">> CAPTURED: {request.method} {request.url}"
+            httpx_client.event_hooks["request"].append(_log_request)
+            print("[ContextAgent] httpx event hook attached.")
+        except Exception as exc:
+            print(f"[ContextAgent] Could not attach httpx event hook: {exc}")
+
         # Log the effective API endpoint
         try:
             api_client = self._client._api_client
