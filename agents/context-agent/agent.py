@@ -35,6 +35,7 @@ Model calling (endpoint = model ID, full Vertex path, or https:// URL):
 Misc:
   self-inspect    — show env vars & resolved own resource name
   log             <message...>   — write a line to Cloud Logging (stdout)
+  logapi          <message...>   — write a log entry via Cloud Logging API
   help
 """
 
@@ -263,6 +264,7 @@ class ContextAgent:
             "call-model":      self._call_model,
             "self-inspect":    self._self_inspect,
             "log":             self._log,
+            "logapi":          self._logapi,
             "help":            lambda _: __doc__,
             "?":               lambda _: __doc__,
         }
@@ -280,6 +282,18 @@ class ContextAgent:
         msg = args.strip() or "(empty log message)"
         print(f"[LOG] {msg}")
         return _ok(endpoint=self._last_request, logged=msg)
+
+    def _logapi(self, args: str) -> str:
+        """logapi <message...> — write a log entry via the Cloud Logging API."""
+        import google.cloud.logging as cloud_logging
+        msg = args.strip() or "(empty log message)"
+        try:
+            lc = cloud_logging.Client(project=PROJECT_ID)
+            logger = lc.logger("context-agent")
+            logger.log_text(msg, severity="INFO")
+            return _ok(endpoint=self._last_request, logged=msg, via="cloud-logging-api")
+        except Exception as exc:
+            return _err(str(exc), endpoint=self._last_request)
 
     def _self_inspect(self, _args: str) -> str:
         own, inspection = _discover_own_resource()
@@ -599,6 +613,7 @@ def deploy(
                 "google-auth[cryptography]",
                 "pyOpenSSL",
                 "google-cloud-storage",
+                "google-cloud-logging",
             ],
             "staging_bucket": STAGING_BUCKET,
         },
