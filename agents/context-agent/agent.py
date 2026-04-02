@@ -35,6 +35,8 @@ Model calling (endpoint = model ID, full Vertex path, or https:// URL):
 Misc:
   self-inspect    — show env vars & resolved own resource name
   token-info      — show the SDK's access token and tokeninfo (bound/unbound, scopes, SA)
+  setenv          <NAME> <VALUE>   — set an env var for this session (persists for all libs)
+  getenv          [<NAME>]         — read one env var, or dump all if no name given
   log             <message...>   — write a line to Cloud Logging (stdout)
   logapi          <message...>   — write a log entry via Cloud Logging API
   help
@@ -265,6 +267,8 @@ class ContextAgent:
             "call-model":      self._call_model,
             "self-inspect":    self._self_inspect,
             "token-info":      self._token_info,
+            "setenv":          self._setenv,
+            "getenv":          self._getenv,
             "log":             self._log,
             "logapi":          self._logapi,
             "help":            lambda _: __doc__,
@@ -363,6 +367,25 @@ class ContextAgent:
             tokeninfo_as_access_token=tokeninfo_access,
             tokeninfo_as_id_token=tokeninfo_id,
         )
+
+    def _setenv(self, args: str) -> str:
+        """setenv <NAME> <VALUE> — set an env var for this session (visible to all libraries)."""
+        import os
+        parts = args.split(None, 1)
+        if len(parts) < 2:
+            return _err("usage: setenv <NAME> <VALUE>")
+        name, value = parts[0], parts[1]
+        os.environ[name] = value
+        return _ok(set={name: value})
+
+    def _getenv(self, args: str) -> str:
+        """getenv <NAME> — read an env var (or list all if no name given)."""
+        import os
+        name = args.strip()
+        if name:
+            return _ok(name=name, value=os.environ.get(name))
+        # No name — dump all env vars.
+        return _ok(env=dict(os.environ))
 
     def _log(self, args: str) -> str:
         """log <message...> — write a line to Cloud Logging (stdout) and return it."""
