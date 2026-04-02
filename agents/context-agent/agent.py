@@ -150,8 +150,23 @@ class ContextAgent:
         self._base_url = base_url
 
     def set_up(self):
-        self._client = _make_client(self._base_url)
+        from google.genai.types import HttpOptions
+        kwargs: dict = {"project": PROJECT_ID, "location": LOCATION}
+        if self._base_url:
+            kwargs["http_options"] = HttpOptions(baseUrl=self._base_url)
+        self._client = vertexai.Client(**kwargs)
         self._ae = self._client.agent_engines
+        # Log the effective API endpoint
+        try:
+            api_client = self._client._api_client
+            effective_url = getattr(api_client, "custom_base_url", None) or getattr(api_client, "_base_url", None)
+            print(f"[ContextAgent] base_url param: {self._base_url!r}")
+            print(f"[ContextAgent] api_client type: {type(api_client).__name__}")
+            print(f"[ContextAgent] api_client.custom_base_url: {getattr(api_client, 'custom_base_url', '<not found>')!r}")
+            print(f"[ContextAgent] api_client.project: {getattr(api_client, 'project', '<not found>')!r}")
+            print(f"[ContextAgent] api_client.location: {getattr(api_client, 'location', '<not found>')!r}")
+        except Exception as exc:
+            print(f"[ContextAgent] Could not inspect api_client: {exc}")
         print("[ContextAgent] Agent is ready.")
 
     # ------------------------------------------------------------------
@@ -510,7 +525,14 @@ def _make_client(base_url: str | None = None) -> vertexai.Client:
     kwargs = {"project": PROJECT_ID, "location": LOCATION}
     if base_url:
         kwargs["http_options"] = HttpOptions(baseUrl=base_url)
-    return vertexai.Client(**kwargs)
+    client = vertexai.Client(**kwargs)
+    try:
+        api_client = client._api_client
+        print(f"[_make_client] base_url param: {base_url!r}")
+        print(f"[_make_client] api_client.custom_base_url: {getattr(api_client, 'custom_base_url', '<not found>')!r}")
+    except Exception as exc:
+        print(f"[_make_client] Could not inspect api_client: {exc}")
+    return client
 
 
 def deploy(base_url: str | None = None):
