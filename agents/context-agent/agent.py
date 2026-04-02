@@ -703,6 +703,10 @@ def deploy(
                 "google-cloud-logging",
             ],
             "staging_bucket": STAGING_BUCKET,
+            "env_vars": {
+                "GOOGLE_API_PREVENT_AGENT_TOKEN_SHARING_FOR_GCP_SERVICES": "false",
+                "GOOGLE_API_USE_CLIENT_CERTIFICATE": "false",
+            },
         },
     )
     dump = remote_agent.model_dump()
