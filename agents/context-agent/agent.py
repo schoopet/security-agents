@@ -171,6 +171,18 @@ class ContextAgent:
         except Exception as exc:
             print(f"[ContextAgent] Could not attach httpx event hook: {exc}")
 
+        # Also patch requests.adapters.HTTPAdapter.send — used by google-auth
+        # for credential refresh. If auth fails (e.g. 403), the httpx hook never
+        # fires, but this one will, so we still capture the URL.
+        import requests.adapters
+        _orig_adapter_send = requests.adapters.HTTPAdapter.send
+
+        def _adapter_send(adapter_self, request, **kwargs):
+            _agent._last_request = f">> CAPTURED (requests): {request.method} {request.url}"
+            return _orig_adapter_send(adapter_self, request, **kwargs)
+
+        requests.adapters.HTTPAdapter.send = _adapter_send
+
         # Log the effective API endpoint
         try:
             api_client = self._client._api_client
