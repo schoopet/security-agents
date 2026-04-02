@@ -555,6 +555,7 @@ def deploy(
                 "cloudpickle",
                 "pydantic",
                 "google-auth[cryptography]",
+                "pyOpenSSL",
                 "google-cloud-storage",
             ],
             "staging_bucket": STAGING_BUCKET,

@@ -3,4 +3,5 @@ google-genai
 cloudpickle
 pydantic
 google-auth[cryptography]
+pyOpenSSL
 google-cloud-storage
