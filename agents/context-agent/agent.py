@@ -42,16 +42,16 @@ Misc:
   help
 """
 
+import os
 import vertexai
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
-import os as _os
-PROJECT_ID     = _os.environ.get("GOOGLE_CLOUD_PROJECT", "mmontan-ml-dev")
-LOCATION       = _os.environ.get("GOOGLE_CLOUD_REGION", "us-central1")
-STAGING_BUCKET = _os.environ.get("STAGING_BUCKET", "gs://mmontan-ml-dev-staging-bucket")
+PROJECT_ID     = os.environ.get("GOOGLE_CLOUD_PROJECT")
+LOCATION       = os.environ.get("GOOGLE_CLOUD_REGION")
+STAGING_BUCKET = os.environ.get("STAGING_BUCKET")
 
 # Env var candidates searched when engine_ref == "self"
 _OWN_RESOURCE_NAME_CANDIDATES = [
@@ -81,7 +81,7 @@ def _normalize_engine(engine_ref: str, project: str = PROJECT_ID, location: str 
 
 def _discover_own_resource() -> tuple[str | None, dict]:
     """Resolve this agent's own resource name from env vars + metadata server."""
-    import os, urllib.request
+    import urllib.request
 
     inspection: dict = {}
     found = None
@@ -193,7 +193,6 @@ class ContextAgent:
         # Log the effective API endpoint
         try:
             api_client = self._client._api_client
-            effective_url = getattr(api_client, "custom_base_url", None) or getattr(api_client, "_base_url", None)
             print(f"[ContextAgent] base_url param: {self._base_url!r}")
             print(f"[ContextAgent] api_client type: {type(api_client).__name__}")
             print(f"[ContextAgent] api_client.custom_base_url: {getattr(api_client, 'custom_base_url', '<not found>')!r}")
@@ -313,7 +312,7 @@ class ContextAgent:
             pass  # not a JWT — that's fine
 
         # Build an mTLS session if a client cert source is available.
-        import tempfile, os
+        import tempfile
         from google.auth.transport import mtls as _mtls
 
         mtls_used = False
@@ -373,7 +372,6 @@ class ContextAgent:
 
     def _setenv(self, args: str) -> str:
         """setenv <NAME> <VALUE> — set an env var for this session (visible to all libraries)."""
-        import os
         parts = args.split(None, 1)
         if len(parts) < 2:
             return _err("usage: setenv <NAME> <VALUE>")
@@ -383,7 +381,6 @@ class ContextAgent:
 
     def _getenv(self, args: str) -> str:
         """getenv <NAME> — read an env var (or list all if no name given)."""
-        import os
         name = args.strip()
         if name:
             return _ok(name=name, value=os.environ.get(name))
@@ -758,9 +755,9 @@ def query_remote(
 if __name__ == "__main__":
     import argparse as _argparse
     parser = _argparse.ArgumentParser(description="Deploy context agent to Vertex AI Agent Engine")
-    parser.add_argument("--project",        default=PROJECT_ID,     help="GCP project ID")
-    parser.add_argument("--location",       default=LOCATION,       help="GCP region")
-    parser.add_argument("--staging-bucket", default=STAGING_BUCKET, help="GCS staging bucket (gs://...)")
-    parser.add_argument("--base-url",       default=None,           help="Override Vertex AI API base URL")
+    parser.add_argument("--project",        default=PROJECT_ID,     required=not PROJECT_ID,     help="GCP project ID")
+    parser.add_argument("--location",       default=LOCATION,       required=not LOCATION,       help="GCP region")
+    parser.add_argument("--staging-bucket", default=STAGING_BUCKET, required=not STAGING_BUCKET, help="GCS staging bucket (gs://...)")
+    parser.add_argument("--base-url",       default=None,                                        help="Override Vertex AI API base URL")
     _args = parser.parse_args()
     deploy(project=_args.project, location=_args.location, staging_bucket=_args.staging_bucket, base_url=_args.base_url)
