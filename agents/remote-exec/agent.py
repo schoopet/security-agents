@@ -99,7 +99,7 @@ def deploy(project: str, region: str, staging_bucket: str, base_url: str | None 
         config={
             "display_name": "working-custom",
             "identity_type": "AGENT_IDENTITY",
-            "requirements": ["google-cloud-aiplatform[agent_engines]", "cloudpickle", "pydantic", "google-auth[cryptography]", "google-cloud-storage"],
+            "requirements": ["google-cloud-aiplatform[agent_engines]", "cloudpickle", "pydantic", "google-auth[cryptography]", "google-cloud-storage", "pyOpenSSL"],
             "staging_bucket": staging_bucket,
             "max_instances": 5,
             "env_vars": {
