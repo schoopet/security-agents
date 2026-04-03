@@ -66,7 +66,7 @@ _OWN_RESOURCE_NAME_CANDIDATES = [
 # Resource name helpers
 # ---------------------------------------------------------------------------
 
-def _normalize_engine(engine_ref: str) -> str | None:
+def _normalize_engine(engine_ref: str, location: str = LOCATION) -> str | None:
     """Return a full reasoningEngines resource path."""
     import re
     if not engine_ref:
@@ -74,7 +74,7 @@ def _normalize_engine(engine_ref: str) -> str | None:
     if "reasoningEngines/" in engine_ref:
         return engine_ref
     if re.match(r"^\d+$", engine_ref):
-        return f"projects/{PROJECT_ID}/locations/{LOCATION}/reasoningEngines/{engine_ref}"
+        return f"projects/{PROJECT_ID}/locations/{location}/reasoningEngines/{engine_ref}"
     return engine_ref
 
 
@@ -151,14 +151,15 @@ def _err(msg: str, **fields) -> str:
 
 class ContextAgent:
 
-    def __init__(self, base_url: str | None = None):
+    def __init__(self, base_url: str | None = None, location: str = LOCATION):
         self._base_url = base_url
+        self._location = location
         self._last_request: str | None = None  # set by httpx hook after each SDK call
 
     def set_up(self):
         from google.genai.types import HttpOptions
 
-        kwargs: dict = {"project": PROJECT_ID, "location": LOCATION}
+        kwargs: dict = {"project": PROJECT_ID, "location": self._location}
         if self._base_url:
             kwargs["http_options"] = HttpOptions(baseUrl=self._base_url)
         self._client = vertexai.Client(**kwargs)
@@ -214,7 +215,7 @@ class ContextAgent:
                     f"or run 'self-inspect'"
                 )
             return own, None
-        normalized = _normalize_engine(engine_ref)
+        normalized = _normalize_engine(engine_ref, location=self._location)
         if not normalized:
             return None, f"could not parse engine reference: {engine_ref!r}"
         return normalized, None
@@ -712,7 +713,7 @@ def deploy(
 ):
     client = _make_client(project=project, location=location, base_url=base_url)
     remote_agent = client.agent_engines.create(
-        agent=ContextAgent(base_url=base_url),
+        agent=ContextAgent(base_url=base_url, location=location),
         config={
             "display_name": "context-agent",
             "identity_type": "AGENT_IDENTITY",
