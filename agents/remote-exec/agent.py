@@ -3,12 +3,9 @@ Custom Agent for Vertex AI Agent Engine
 Reference: https://docs.cloud.google.com/agent-builder/agent-engine/develop/custom
 """
 
+import argparse
+import os
 import vertexai
-
-# --- Configuration ---
-PROJECT_ID = "mmontan-ml-dev"
-LOCATION = "us-central1"
-STAGING_BUCKET = "gs://mmontan-ml-dev-staging-bucket"
 
 
 # --- Custom Agent Class ---
@@ -87,16 +84,23 @@ class MyAgent:
 
 
 # --- Deploy to Agent Engine ---
-def deploy():
-    client = vertexai.Client(project=PROJECT_ID, location=LOCATION)
+def deploy(project: str, region: str, staging_bucket: str, base_url: str | None = None):
+    from google.genai.types import HttpOptions
+    kwargs: dict = {"project": project, "location": region}
+    if base_url:
+        kwargs["http_options"] = HttpOptions(baseUrl=base_url)
+    client = vertexai.Client(**kwargs)
 
+    effective_base = (base_url or f"https://{region}-aiplatform.googleapis.com").rstrip("/")
+    deploy_endpoint = f"{effective_base}/v1/projects/{project}/locations/{region}/reasoningEngines"
+    print(f"[*] Deploying to: {deploy_endpoint}")
     remote_agent = client.agent_engines.create(
         agent=MyAgent(),
         config={
             "display_name": "working-custom",
             "identity_type": "AGENT_IDENTITY",
             "requirements": ["google-cloud-aiplatform[agent_engines]", "cloudpickle", "pydantic", "google-auth[cryptography]", "google-cloud-storage"],
-            "staging_bucket": STAGING_BUCKET,
+            "staging_bucket": staging_bucket,
         },
     )
     print(f"Deployed agent: {remote_agent.model_dump()}")
@@ -104,8 +108,8 @@ def deploy():
 
 
 # --- Query a deployed agent ---
-def query_remote(resource_name: str, user_input: str):
-    client = vertexai.Client(project=PROJECT_ID, location=LOCATION)
+def query_remote(resource_name: str, user_input: str, project: str, region: str):
+    client = vertexai.Client(project=project, location=region)
     remote_agent = client.agent_engines.get(resource_name)
     response = remote_agent.query(input=user_input)
     print(f"Remote response: {response}")
@@ -113,4 +117,10 @@ def query_remote(resource_name: str, user_input: str):
 
 
 if __name__ == "__main__":
-    deploy()
+    parser = argparse.ArgumentParser(description="Deploy a custom agent to Vertex AI Agent Engine")
+    parser.add_argument("--project", default=os.environ.get("GOOGLE_CLOUD_PROJECT"), required=not os.environ.get("GOOGLE_CLOUD_PROJECT"), help="GCP project ID")
+    parser.add_argument("--region", default=os.environ.get("GOOGLE_CLOUD_REGION"), required=not os.environ.get("GOOGLE_CLOUD_REGION"), help="GCP region")
+    parser.add_argument("--staging-bucket", default=os.environ.get("STAGING_BUCKET"), required=not os.environ.get("STAGING_BUCKET"), help="GCS staging bucket (gs://...)")
+    parser.add_argument("--base-url", default=None, help="Override Vertex AI API base URL")
+    args = parser.parse_args()
+    deploy(args.project, args.region, args.staging_bucket, base_url=args.base_url)

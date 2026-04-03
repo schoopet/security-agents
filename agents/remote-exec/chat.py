@@ -15,12 +15,10 @@ Commands:
     exit                  — quit
 """
 
+import os
 import sys
 import base64
 import vertexai
-
-PROJECT_ID = "mmontan-ml-dev"
-LOCATION = "us-central1"
 
 
 def print_cert(cert):
@@ -72,8 +70,12 @@ def print_certs(pem_data: bytes):
         print_cert(cert)
 
 
-def chat(resource_name: str):
-    client = vertexai.Client(project=PROJECT_ID, location=LOCATION)
+def chat(resource_name: str, project: str, region: str, base_url: str | None = None):
+    from google.genai.types import HttpOptions
+    kwargs: dict = {"project": project, "location": region}
+    if base_url:
+        kwargs["http_options"] = HttpOptions(baseUrl=base_url)
+    client = vertexai.Client(**kwargs)
     agent = client.agent_engines.get(name=resource_name)
     print(f"[*] Connected to {resource_name}")
     print("[*] Commands: ls <path>, get <file>, decode <file>, download <file>, exec <cmd>, gsls gs://<bucket>, gsfetch gs://<bucket>/<file>, exit\n")
@@ -124,7 +126,26 @@ def chat(resource_name: str):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python receive.py <resource_name>")
-        sys.exit(1)
-    chat(sys.argv[1])
+    import argparse
+    parser = argparse.ArgumentParser(description="Interactive shell against a deployed Agent Engine")
+    parser.add_argument("resource_name", help="Agent resource name or just the ID (projects/.../reasoningEngines/... or <id>)")
+    parser.add_argument("--project", default=os.environ.get("GOOGLE_CLOUD_PROJECT"), help="GCP project ID")
+    parser.add_argument("--region", default=os.environ.get("GOOGLE_CLOUD_REGION"), help="GCP region")
+    parser.add_argument("--base-url", default=None, help="Override Vertex AI API base URL")
+    args = parser.parse_args()
+    resource_name = args.resource_name
+    if "/" not in resource_name:
+        if not args.project:
+            parser.error("--project is required when resource_name is a bare ID")
+        if not args.region:
+            parser.error("--region is required when resource_name is a bare ID")
+        resource_name = f"projects/{args.project}/locations/{args.region}/reasoningEngines/{resource_name}"
+
+    # Extract project and region from full resource name to ensure the client
+    # is initialized with the location matching the resource name.
+    parts = resource_name.split("/")
+    # expected: projects/{project}/locations/{region}/reasoningEngines/{id}
+    project = args.project or (parts[1] if len(parts) > 1 else None)
+    region = parts[3] if len(parts) > 3 else args.region
+
+    chat(resource_name, project, region, base_url=args.base_url)

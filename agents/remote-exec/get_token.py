@@ -23,11 +23,9 @@ Example:
 import argparse
 import base64
 import json
+import os
 import sys
 import vertexai
-
-PROJECT_ID = "mmontan-ml-dev"
-LOCATION = "us-central1"
 
 # Reads the SPIFFE leaf certificate and returns its metadata as JSON.
 _ANALYZE_CERT_SCRIPT = b"""
@@ -99,8 +97,12 @@ def _run_script(agent, script: bytes) -> dict:
     raise RuntimeError(f"Unexpected agent output:\n{raw}")
 
 
-def fetch_cert_and_token(resource_name: str) -> tuple[dict, dict]:
-    client = vertexai.Client(project=PROJECT_ID, location=LOCATION)
+def fetch_cert_and_token(resource_name: str, project: str, region: str, base_url: str | None = None) -> tuple[dict, dict]:
+    from google.genai.types import HttpOptions
+    kwargs: dict = {"project": project, "location": region}
+    if base_url:
+        kwargs["http_options"] = HttpOptions(baseUrl=base_url)
+    client = vertexai.Client(**kwargs)
     agent = client.agent_engines.get(name=resource_name)
     cert  = _run_script(agent, _ANALYZE_CERT_SCRIPT)
     token = _run_script(agent, _FETCH_TOKEN_SCRIPT)
@@ -119,11 +121,14 @@ def inspect_token(token: str) -> dict:
 def main():
     parser = argparse.ArgumentParser(description="Analyze a cert-bound GCP access token from an Agent Engine")
     parser.add_argument("--agent", required=True, help="Agent resource name (projects/.../reasoningEngines/...)")
+    parser.add_argument("--project", default=os.environ.get("GOOGLE_CLOUD_PROJECT"), required=not os.environ.get("GOOGLE_CLOUD_PROJECT"), help="GCP project ID")
+    parser.add_argument("--region", default=os.environ.get("GOOGLE_CLOUD_REGION"), required=not os.environ.get("GOOGLE_CLOUD_REGION"), help="GCP region")
+    parser.add_argument("--base-url", default=None, help="Override Vertex AI API base URL")
     parser.add_argument("--inspect", action="store_true", help="Decode token claims via tokeninfo endpoint")
     args = parser.parse_args()
 
     print(f"[*] Connecting to agent: {args.agent}")
-    cert, token = fetch_cert_and_token(args.agent)
+    cert, token = fetch_cert_and_token(args.agent, args.project, args.region, base_url=args.base_url)
 
     print(f"\n[+] Certificate:")
     print(f"      SPIFFE URI:  {cert['spiffe_uri']}")
