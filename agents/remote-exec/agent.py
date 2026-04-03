@@ -101,6 +101,10 @@ def deploy(project: str, region: str, staging_bucket: str, base_url: str | None 
             "identity_type": "AGENT_IDENTITY",
             "requirements": ["google-cloud-aiplatform[agent_engines]", "cloudpickle", "pydantic", "google-auth[cryptography]", "google-cloud-storage"],
             "staging_bucket": staging_bucket,
+            "max_instances": 5,
+            "env_vars": {
+                "GOOGLE_CLOUD_LOCATION": "us-central1",
+            },
         },
     )
     print(f"Deployed agent: {remote_agent.model_dump()}")
