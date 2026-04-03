@@ -48,9 +48,10 @@ import vertexai
 # Configuration
 # ---------------------------------------------------------------------------
 
-PROJECT_ID = "mmontan-ml-dev"
-LOCATION = "us-central1"
-STAGING_BUCKET = "gs://mmontan-ml-dev-staging-bucket"
+import os as _os
+PROJECT_ID     = _os.environ.get("GOOGLE_CLOUD_PROJECT", "mmontan-ml-dev")
+LOCATION       = _os.environ.get("GOOGLE_CLOUD_REGION", "us-central1")
+STAGING_BUCKET = _os.environ.get("STAGING_BUCKET", "gs://mmontan-ml-dev-staging-bucket")
 
 # Env var candidates searched when engine_ref == "self"
 _OWN_RESOURCE_NAME_CANDIDATES = [
@@ -66,7 +67,7 @@ _OWN_RESOURCE_NAME_CANDIDATES = [
 # Resource name helpers
 # ---------------------------------------------------------------------------
 
-def _normalize_engine(engine_ref: str, location: str = LOCATION) -> str | None:
+def _normalize_engine(engine_ref: str, project: str = PROJECT_ID, location: str = LOCATION) -> str | None:
     """Return a full reasoningEngines resource path."""
     import re
     if not engine_ref:
@@ -74,7 +75,7 @@ def _normalize_engine(engine_ref: str, location: str = LOCATION) -> str | None:
     if "reasoningEngines/" in engine_ref:
         return engine_ref
     if re.match(r"^\d+$", engine_ref):
-        return f"projects/{PROJECT_ID}/locations/{location}/reasoningEngines/{engine_ref}"
+        return f"projects/{project}/locations/{location}/reasoningEngines/{engine_ref}"
     return engine_ref
 
 
@@ -151,15 +152,16 @@ def _err(msg: str, **fields) -> str:
 
 class ContextAgent:
 
-    def __init__(self, base_url: str | None = None, location: str = LOCATION):
+    def __init__(self, base_url: str | None = None, project: str = PROJECT_ID, location: str = LOCATION):
         self._base_url = base_url
+        self._project = project
         self._location = location
         self._last_request: str | None = None  # set by httpx hook after each SDK call
 
     def set_up(self):
         from google.genai.types import HttpOptions
 
-        kwargs: dict = {"project": PROJECT_ID, "location": self._location}
+        kwargs: dict = {"project": self._project, "location": self._location}
         if self._base_url:
             kwargs["http_options"] = HttpOptions(baseUrl=self._base_url)
         self._client = vertexai.Client(**kwargs)
@@ -215,7 +217,7 @@ class ContextAgent:
                     f"or run 'self-inspect'"
                 )
             return own, None
-        normalized = _normalize_engine(engine_ref, location=self._location)
+        normalized = _normalize_engine(engine_ref, project=self._project, location=self._location)
         if not normalized:
             return None, f"could not parse engine reference: {engine_ref!r}"
         return normalized, None
@@ -399,7 +401,7 @@ class ContextAgent:
         import google.cloud.logging as cloud_logging
         msg = args.strip() or "(empty log message)"
         try:
-            lc = cloud_logging.Client(project=PROJECT_ID)
+            lc = cloud_logging.Client(project=self._project)
             logger = lc.logger("context-agent")
             logger.log_text(msg, severity="INFO")
             return _ok(endpoint=self._last_request, logged=msg, via="cloud-logging-api")
@@ -646,9 +648,7 @@ class ContextAgent:
 
     def _call_vertex(self, model_id: str, prompt: str) -> str:
         try:
-            from vertexai.generative_models import GenerativeModel
-            model = GenerativeModel(model_name=model_id)
-            response = model.generate_content(prompt)
+            response = self._client.models.generate_content(model=model_id, contents=prompt)
             return _ok(endpoint=self._last_request, response=response.text)
         except Exception as exc:
             return _err(str(exc), endpoint=self._last_request)
@@ -709,11 +709,12 @@ def _make_client(
 def deploy(
     project: str = PROJECT_ID,
     location: str = LOCATION,
+    staging_bucket: str = STAGING_BUCKET,
     base_url: str | None = None,
 ):
     client = _make_client(project=project, location=location, base_url=base_url)
     remote_agent = client.agent_engines.create(
-        agent=ContextAgent(base_url=base_url, location=location),
+        agent=ContextAgent(base_url=base_url, project=project, location=location),
         config={
             "display_name": "context-agent",
             "identity_type": "AGENT_IDENTITY",
@@ -726,7 +727,7 @@ def deploy(
                 "google-cloud-storage",
                 "google-cloud-logging",
             ],
-            "staging_bucket": STAGING_BUCKET,
+            "staging_bucket": staging_bucket,
             "max_instances": 5,
             "env_vars": {
                 "GOOGLE_API_PREVENT_AGENT_TOKEN_SHARING_FOR_GCP_SERVICES": "false",
@@ -755,19 +756,11 @@ def query_remote(
 
 
 if __name__ == "__main__":
-    import sys as _sys
-
-    def _pop_flag(args: list, flag: str) -> str | None:
-        if flag in args:
-            idx = args.index(flag)
-            val = args[idx + 1]
-            del args[idx:idx + 2]
-            return val
-        return None
-
-    # Usage: agent.py [--project <id>] [--location <loc>] [--base-url <url>]
-    _args = _sys.argv[1:]
-    _project  = _pop_flag(_args, "--project")  or PROJECT_ID
-    _location = _pop_flag(_args, "--location") or LOCATION
-    _base_url = _pop_flag(_args, "--base-url")
-    deploy(project=_project, location=_location, base_url=_base_url)
+    import argparse as _argparse
+    parser = _argparse.ArgumentParser(description="Deploy context agent to Vertex AI Agent Engine")
+    parser.add_argument("--project",        default=PROJECT_ID,     help="GCP project ID")
+    parser.add_argument("--location",       default=LOCATION,       help="GCP region")
+    parser.add_argument("--staging-bucket", default=STAGING_BUCKET, help="GCS staging bucket (gs://...)")
+    parser.add_argument("--base-url",       default=None,           help="Override Vertex AI API base URL")
+    _args = parser.parse_args()
+    deploy(project=_args.project, location=_args.location, staging_bucket=_args.staging_bucket, base_url=_args.base_url)
