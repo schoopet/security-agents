@@ -726,6 +726,7 @@ def deploy(
                 "google-cloud-logging",
             ],
             "staging_bucket": STAGING_BUCKET,
+            "max_instances": 5,
             "env_vars": {
                 "GOOGLE_API_PREVENT_AGENT_TOKEN_SHARING_FOR_GCP_SERVICES": "false",
                 "GOOGLE_API_USE_CLIENT_CERTIFICATE": "false",
