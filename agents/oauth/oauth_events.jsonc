@@ -1,0 +1,386 @@
+// ════════════════════════════════════════════════════════════
+// PHASE 1 — Initial query
+// ════════════════════════════════════════════════════════════
+// 
+// [1/8] client → agent
+// The user's opening message. Passed as `new_message` to runner.run_async().
+// Type: google.genai.types.Content
+{
+  "parts": [
+    {
+      "text": "Show me my upcoming calendar events."
+    }
+  ],
+  "role": "user"
+}
+
+// [2/8] agent → client
+// The LLM decides to call the calendar tool. This is a standard
+// function-call event; longRunningToolIds is empty — not yet long-running.
+// Type: google.adk.events.Event
+{
+  "modelVersion": "gemini-2.0-flash",
+  "content": {
+    "parts": [
+      {
+        "functionCall": {
+          "id": "adk-8089f155-df00-4c05-b9fc-c1cdf693710d",
+          "args": {},
+          "name": "list_calendar_events"
+        }
+      }
+    ],
+    "role": "model"
+  },
+  "finishReason": "STOP",
+  "usageMetadata": {
+    "candidatesTokenCount": 5,
+    "candidatesTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 5
+      }
+    ],
+    "promptTokenCount": 60,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 60
+      }
+    ],
+    "totalTokenCount": 65,
+    "trafficType": "ON_DEMAND"
+  },
+  "avgLogprobs": 4.014413570985198e-06,
+  "invocationId": "e-3ee9bd76-072e-4371-8c3a-95ae66c2bfca",
+  "author": "calendar_agent",
+  "actions": {
+    "stateDelta": {},
+    "artifactDelta": {},
+    "requestedAuthConfigs": {},
+    "requestedToolConfirmations": {}
+  },
+  "longRunningToolIds": [],
+  "id": "160c31dc-585e-4423-b039-7f13e32037ef",
+  "timestamp": 1775660325.127929
+}
+
+// [3/8] agent → client
+// ADK's OAuth challenge event. The framework synthesises this FunctionCall
+// named `adk_request_credential` and yields it to the client.
+// The client must detect it via longRunningToolIds (non-empty here),
+// extract authConfig.exchangedAuthCredential.oauth2.authUri, redirect the
+// user there, then send the callback URL back as a FunctionResponse (see [6/8]).
+// Type: google.adk.events.Event
+{
+  "content": {
+    "parts": [
+      {
+        "functionCall": {
+          "id": "adk-7ee82c71-7293-4184-b78b-baf64b36a3fe",
+          "args": {
+            "functionCallId": "adk-8089f155-df00-4c05-b9fc-c1cdf693710d",
+            "authConfig": {
+              "authScheme": {
+                "type": "oauth2",
+                "flows": {
+                  "authorizationCode": {
+                    "scopes": {
+                      "https://www.googleapis.com/auth/calendar.readonly": "Read Google Calendar"
+                    },
+                    "authorizationUrl": "https://accounts.google.com/o/oauth2/auth",
+                    "tokenUrl": "https://oauth2.googleapis.com/token"
+                  }
+                }
+              },
+              "rawAuthCredential": {
+                "authType": "oauth2",
+                "oauth2": {
+                  "clientId": "<redacted>",
+                  "clientSecret": "<redacted>",
+                  "tokenEndpointAuthMethod": "client_secret_basic"
+                }
+              },
+              "exchangedAuthCredential": {
+                "authType": "oauth2",
+                "oauth2": {
+                  "clientId": "<redacted>",
+                  "clientSecret": "<redacted>",
+                  "authUri": "https://accounts.google.com/o/oauth2/auth?response_type=code&client_id=158296564676-2ebaojinqlb6epvkorooct9uk0ains66.apps.googleusercontent.com&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcalendar.readonly&state=ou7Gg66QivLs0KKdSwi2Na5t0dhywC&access_type=offline&prompt=consent",
+                  "state": "ou7Gg66QivLs0KKdSwi2Na5t0dhywC",
+                  "tokenEndpointAuthMethod": "client_secret_basic"
+                }
+              },
+              "credentialKey": "adk_oauth2_c1f06db5bf8650a2_oauth2_c20491b37d533b3e"
+            }
+          },
+          "name": "adk_request_credential"
+        }
+      }
+    ],
+    "role": "user"
+  },
+  "invocationId": "e-3ee9bd76-072e-4371-8c3a-95ae66c2bfca",
+  "author": "calendar_agent",
+  "actions": {
+    "stateDelta": {},
+    "artifactDelta": {},
+    "requestedAuthConfigs": {},
+    "requestedToolConfirmations": {}
+  },
+  "longRunningToolIds": [
+    "adk-7ee82c71-7293-4184-b78b-baf64b36a3fe"
+  ],
+  "id": "831c5018-53a5-4114-9e03-7080b18870b9",
+  "timestamp": 1775660326.421936
+}
+
+// [4/8] agent → client
+// The tool's own FunctionResponse returning {status: pending}.
+// ADK also records the full requestedAuthConfigs in event.actions,
+// which is how it tracks the pending credential request internally.
+// Type: google.adk.events.Event
+{
+  "content": {
+    "parts": [
+      {
+        "functionResponse": {
+          "id": "adk-8089f155-df00-4c05-b9fc-c1cdf693710d",
+          "name": "list_calendar_events",
+          "response": {
+            "status": "pending",
+            "message": "OAuth credentials required."
+          }
+        }
+      }
+    ],
+    "role": "user"
+  },
+  "invocationId": "e-3ee9bd76-072e-4371-8c3a-95ae66c2bfca",
+  "author": "calendar_agent",
+  "actions": {
+    "stateDelta": {},
+    "artifactDelta": {},
+    "requestedAuthConfigs": {
+      "adk-8089f155-df00-4c05-b9fc-c1cdf693710d": {
+        "authScheme": {
+          "type": "oauth2",
+          "flows": {
+            "authorizationCode": {
+              "scopes": {
+                "https://www.googleapis.com/auth/calendar.readonly": "Read Google Calendar"
+              },
+              "authorizationUrl": "https://accounts.google.com/o/oauth2/auth",
+              "tokenUrl": "https://oauth2.googleapis.com/token"
+            }
+          }
+        },
+        "rawAuthCredential": {
+          "authType": "oauth2",
+          "oauth2": {
+            "clientId": "<redacted>",
+            "clientSecret": "<redacted>",
+            "tokenEndpointAuthMethod": "client_secret_basic"
+          }
+        },
+        "exchangedAuthCredential": {
+          "authType": "oauth2",
+          "oauth2": {
+            "clientId": "<redacted>",
+            "clientSecret": "<redacted>",
+            "authUri": "https://accounts.google.com/o/oauth2/auth?response_type=code&client_id=158296564676-2ebaojinqlb6epvkorooct9uk0ains66.apps.googleusercontent.com&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcalendar.readonly&state=ou7Gg66QivLs0KKdSwi2Na5t0dhywC&access_type=offline&prompt=consent",
+            "state": "ou7Gg66QivLs0KKdSwi2Na5t0dhywC",
+            "tokenEndpointAuthMethod": "client_secret_basic"
+          }
+        },
+        "credentialKey": "adk_oauth2_c1f06db5bf8650a2_oauth2_c20491b37d533b3e"
+      }
+    },
+    "requestedToolConfirmations": {}
+  },
+  "id": "6ed89a4c-95de-4b8a-89e4-9ab41880fe63",
+  "timestamp": 1775660326.421661
+}
+
+// [5/8] agent → client
+// The LLM's natural-language reply telling the user that authentication
+// is required. This is the last event of Phase 1; the runner pauses here.
+// Type: google.adk.events.Event
+{
+  "modelVersion": "gemini-2.0-flash",
+  "content": {
+    "parts": [
+      {
+        "text": "I need to authenticate to access your Google Calendar. Please authenticate.\n"
+      }
+    ],
+    "role": "model"
+  },
+  "finishReason": "STOP",
+  "usageMetadata": {
+    "candidatesTokenCount": 14,
+    "candidatesTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 14
+      }
+    ],
+    "promptTokenCount": 77,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 77
+      }
+    ],
+    "totalTokenCount": 91,
+    "trafficType": "ON_DEMAND"
+  },
+  "avgLogprobs": -0.4562781538282122,
+  "invocationId": "e-3ee9bd76-072e-4371-8c3a-95ae66c2bfca",
+  "author": "calendar_agent",
+  "actions": {
+    "stateDelta": {},
+    "artifactDelta": {},
+    "requestedAuthConfigs": {},
+    "requestedToolConfirmations": {}
+  },
+  "id": "3737bab4-6494-4cba-951d-b8235ff9a4b0",
+  "timestamp": 1775660326.423115
+}
+
+// ════════════════════════════════════════════════════════════
+// PHASE 2 — Client returns the OAuth callback URL
+// ════════════════════════════════════════════════════════════
+// 
+// [6/8] client → agent
+// After the user completes the browser OAuth flow, the client sends the
+// full callback URL (containing `code` and `state`) back to ADK as a
+// FunctionResponse whose name matches the challenge: `adk_request_credential`.
+// The `id` field must equal the longRunningToolId from event [3/8].
+// ADK will exchange the code for an access token, store it in session
+// state under credentialKey, then automatically retry the original tool call.
+// Type: google.genai.types.Content
+{
+  "parts": [
+    {
+      "functionResponse": {
+        "id": "adk-7ee82c71-7293-4184-b78b-baf64b36a3fe",
+        "name": "adk_request_credential",
+        "response": {
+          "auth_scheme": {
+            "type_": "oauth2",
+            "flows": {
+              "authorizationCode": {
+                "scopes": {
+                  "https://www.googleapis.com/auth/calendar.readonly": "Read Google Calendar"
+                },
+                "authorizationUrl": "https://accounts.google.com/o/oauth2/auth",
+                "tokenUrl": "https://oauth2.googleapis.com/token"
+              }
+            }
+          },
+          "raw_auth_credential": {
+            "auth_type": "oauth2",
+            "oauth2": {
+              "client_id": "<redacted>",
+              "client_secret": "<redacted>",
+              "token_endpoint_auth_method": "client_secret_basic"
+            }
+          },
+          "exchanged_auth_credential": {
+            "auth_type": "oauth2",
+            "oauth2": {
+              "client_id": "<redacted>",
+              "client_secret": "<redacted>",
+              "auth_uri": "https://accounts.google.com/o/oauth2/auth?response_type=code&client_id=158296564676-2ebaojinqlb6epvkorooct9uk0ains66.apps.googleusercontent.com&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcalendar.readonly&state=ou7Gg66QivLs0KKdSwi2Na5t0dhywC&access_type=offline&prompt=consent",
+              "state": "ou7Gg66QivLs0KKdSwi2Na5t0dhywC",
+              "redirect_uri": "http://localhost:8080/callback",
+              "auth_response_uri": "http://localhost:8080/callback?code=4%2F0demo-auth-code-replace-with-real&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcalendar.readonly&state=ou7Gg66QivLs0KKdSwi2Na5t0dhywC",
+              "token_endpoint_auth_method": "client_secret_basic"
+            }
+          },
+          "credential_key": "adk_oauth2_c1f06db5bf8650a2_oauth2_c20491b37d533b3e"
+        }
+      }
+    }
+  ],
+  "role": "user"
+}
+
+// [7/8] agent → client
+// The tool's FunctionResponse after successful authentication.
+// In a real deployment this would contain the calendar data.
+// Type: google.adk.events.Event
+{
+  "content": {
+    "parts": [
+      {
+        "functionResponse": {
+          "id": "adk-8089f155-df00-4c05-b9fc-c1cdf693710d",
+          "name": "list_calendar_events",
+          "response": {
+            "status": "authenticated",
+            "message": "Credentials received. Would call Google Calendar API here.",
+            "access_token_preview": "(unavailable)"
+          }
+        }
+      }
+    ],
+    "role": "user"
+  },
+  "invocationId": "e-a71eb937-9626-433b-b664-7d7817d067f2",
+  "author": "calendar_agent",
+  "actions": {
+    "stateDelta": {},
+    "artifactDelta": {},
+    "requestedAuthConfigs": {},
+    "requestedToolConfirmations": {}
+  },
+  "id": "fa3e8d6f-86bf-4ea5-9b70-8893eb26ee66",
+  "timestamp": 1775660327.6266859
+}
+
+// [8/8] agent → client
+// The LLM's final reply to the user, summarising the tool result.
+// Type: google.adk.events.Event
+{
+  "modelVersion": "gemini-2.0-flash",
+  "content": {
+    "parts": [
+      {
+        "text": "OK. I received your credentials and would call the Google Calendar API to list your upcoming events. Since I'm in a sandbox, I can't actually call the API.\n"
+      }
+    ],
+    "role": "model"
+  },
+  "finishReason": "STOP",
+  "usageMetadata": {
+    "candidatesTokenCount": 37,
+    "candidatesTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 37
+      }
+    ],
+    "promptTokenCount": 91,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 91
+      }
+    ],
+    "totalTokenCount": 128,
+    "trafficType": "ON_DEMAND"
+  },
+  "avgLogprobs": -0.10458314096605456,
+  "invocationId": "e-a71eb937-9626-433b-b664-7d7817d067f2",
+  "author": "calendar_agent",
+  "actions": {
+    "stateDelta": {},
+    "artifactDelta": {},
+    "requestedAuthConfigs": {},
+    "requestedToolConfirmations": {}
+  },
+  "id": "93d080ca-4526-4198-94ef-318fab1fe04e",
+  "timestamp": 1775660327.627609
+}
