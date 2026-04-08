@@ -1,0 +1,519 @@
+// ════════════════════════════════════════════════════════════
+// PHASE 1 — Initial query
+// ════════════════════════════════════════════════════════════
+//
+// [1/8] client → Agent Engine   HTTP POST
+// POST https://us-central1-aiplatform.googleapis.com/v1/projects/mmontan-ml-dev/locations/us-central1/reasoningEngines/<your-engine-id>:streamQuery?alt=sse
+// Content-Type: application/json
+// Authorization: Bearer <gcloud-token>
+//
+// The message field is a google.genai.types.Content dict.
+// session_id is omitted on the first turn — Agent Engine creates one.
+// The response is a server-sent event (SSE) stream; each line is:
+//   data: <json>\n\n
+{
+  "classMethod": "async_stream_query",
+  "input": {
+    "message": {
+      "parts": [
+        {
+          "text": "Show me my upcoming calendar events."
+        }
+      ],
+      "role": "user"
+    },
+    "user_id": "demo_user",
+    "session_id": null
+  }
+}
+
+// [2/8] agent → client   SSE chunk  (async_stream_query format)
+// The LLM's decision to call list_calendar_events.
+// longRunningToolIds is [] — not yet long-running.
+//
+// streaming_agent_run_with_events format wraps this in:
+//   {"events": [<this>], "artifacts": [], "session_id": "..."}
+// See the streaming_agent_run_with_events block at the end of the file.
+//
+// SSE wire frame:
+//   data: {"modelVersion":"gemini-2.0-flash","content":{"parts":[{"functionCall":{"id":"adk-8089f155-df00-4c05-b9fc-c1cdf693710d",...
+//   (followed by \n\n)
+{
+  "modelVersion": "gemini-2.0-flash",
+  "content": {
+    "parts": [
+      {
+        "functionCall": {
+          "id": "adk-8089f155-df00-4c05-b9fc-c1cdf693710d",
+          "args": {},
+          "name": "list_calendar_events"
+        }
+      }
+    ],
+    "role": "model"
+  },
+  "finishReason": "STOP",
+  "usageMetadata": {
+    "candidatesTokenCount": 5,
+    "candidatesTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 5
+      }
+    ],
+    "promptTokenCount": 60,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 60
+      }
+    ],
+    "totalTokenCount": 65,
+    "trafficType": "ON_DEMAND"
+  },
+  "avgLogprobs": 4.014413570985198e-06,
+  "invocationId": "e-3ee9bd76-072e-4371-8c3a-95ae66c2bfca",
+  "author": "calendar_agent",
+  "actions": {
+    "stateDelta": {},
+    "artifactDelta": {},
+    "requestedAuthConfigs": {},
+    "requestedToolConfirmations": {}
+  },
+  "longRunningToolIds": [],
+  "id": "160c31dc-585e-4423-b039-7f13e32037ef",
+  "timestamp": 1775660325.127929
+}
+
+// [3/8] agent → client   SSE chunk  (async_stream_query format)
+// ADK's OAuth challenge. The client detects this via longRunningToolIds
+// being non-empty. It must:
+//   1. Extract authConfig.exchangedAuthCredential.oauth2.authUri
+//   2. Append &redirect_uri=<your-redirect-uri> and send user to that URL
+//   3. After the user authorises, capture the full callback URL
+//   4. Send it back in Phase 2 (see [6/8])
+// The session_id received alongside this chunk must be preserved
+// so Phase 2 can resume the same session.
+//
+// SSE wire frame:
+//   data: {"content":{"parts":[{"functionCall":{"id":"adk-7ee82c71-7293-4184-b78b-baf64b36a3fe","args":{"functionCallId":"adk-8089...
+//   (followed by \n\n)
+{
+  "content": {
+    "parts": [
+      {
+        "functionCall": {
+          "id": "adk-7ee82c71-7293-4184-b78b-baf64b36a3fe",
+          "args": {
+            "functionCallId": "adk-8089f155-df00-4c05-b9fc-c1cdf693710d",
+            "authConfig": {
+              "authScheme": {
+                "type": "oauth2",
+                "flows": {
+                  "authorizationCode": {
+                    "scopes": {
+                      "https://www.googleapis.com/auth/calendar.readonly": "Read Google Calendar"
+                    },
+                    "authorizationUrl": "https://accounts.google.com/o/oauth2/auth",
+                    "tokenUrl": "https://oauth2.googleapis.com/token"
+                  }
+                }
+              },
+              "rawAuthCredential": {
+                "authType": "oauth2",
+                "oauth2": {
+                  "clientId": "<redacted>",
+                  "clientSecret": "<redacted>",
+                  "tokenEndpointAuthMethod": "client_secret_basic"
+                }
+              },
+              "exchangedAuthCredential": {
+                "authType": "oauth2",
+                "oauth2": {
+                  "clientId": "<redacted>",
+                  "clientSecret": "<redacted>",
+                  "authUri": "https://accounts.google.com/o/oauth2/auth?response_type=code&client_id=158296564676-2ebaojinqlb6epvkorooct9uk0ains66.apps.googleusercontent.com&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcalendar.readonly&state=ou7Gg66QivLs0KKdSwi2Na5t0dhywC&access_type=offline&prompt=consent",
+                  "state": "ou7Gg66QivLs0KKdSwi2Na5t0dhywC",
+                  "tokenEndpointAuthMethod": "client_secret_basic"
+                }
+              },
+              "credentialKey": "adk_oauth2_c1f06db5bf8650a2_oauth2_c20491b37d533b3e"
+            }
+          },
+          "name": "adk_request_credential"
+        }
+      }
+    ],
+    "role": "user"
+  },
+  "invocationId": "e-3ee9bd76-072e-4371-8c3a-95ae66c2bfca",
+  "author": "calendar_agent",
+  "actions": {
+    "stateDelta": {},
+    "artifactDelta": {},
+    "requestedAuthConfigs": {},
+    "requestedToolConfirmations": {}
+  },
+  "longRunningToolIds": [
+    "adk-7ee82c71-7293-4184-b78b-baf64b36a3fe"
+  ],
+  "id": "831c5018-53a5-4114-9e03-7080b18870b9",
+  "timestamp": 1775660326.421936
+}
+
+// [4/8] agent → client   SSE chunk  (async_stream_query format)
+// The tool's own FunctionResponse — status: pending.
+// actions.requestedAuthConfigs holds the full pending auth config
+// for Agent Engine's internal bookkeeping.
+//
+// SSE wire frame:
+//   data: {"content":{"parts":[{"functionResponse":{"id":"adk-8089f155-df00-4c05-b9fc-c1cdf693710d","name":"list_calendar_events",...
+//   (followed by \n\n)
+{
+  "content": {
+    "parts": [
+      {
+        "functionResponse": {
+          "id": "adk-8089f155-df00-4c05-b9fc-c1cdf693710d",
+          "name": "list_calendar_events",
+          "response": {
+            "status": "pending",
+            "message": "OAuth credentials required."
+          }
+        }
+      }
+    ],
+    "role": "user"
+  },
+  "invocationId": "e-3ee9bd76-072e-4371-8c3a-95ae66c2bfca",
+  "author": "calendar_agent",
+  "actions": {
+    "stateDelta": {},
+    "artifactDelta": {},
+    "requestedAuthConfigs": {
+      "adk-8089f155-df00-4c05-b9fc-c1cdf693710d": {
+        "authScheme": {
+          "type": "oauth2",
+          "flows": {
+            "authorizationCode": {
+              "scopes": {
+                "https://www.googleapis.com/auth/calendar.readonly": "Read Google Calendar"
+              },
+              "authorizationUrl": "https://accounts.google.com/o/oauth2/auth",
+              "tokenUrl": "https://oauth2.googleapis.com/token"
+            }
+          }
+        },
+        "rawAuthCredential": {
+          "authType": "oauth2",
+          "oauth2": {
+            "clientId": "<redacted>",
+            "clientSecret": "<redacted>",
+            "tokenEndpointAuthMethod": "client_secret_basic"
+          }
+        },
+        "exchangedAuthCredential": {
+          "authType": "oauth2",
+          "oauth2": {
+            "clientId": "<redacted>",
+            "clientSecret": "<redacted>",
+            "authUri": "https://accounts.google.com/o/oauth2/auth?response_type=code&client_id=158296564676-2ebaojinqlb6epvkorooct9uk0ains66.apps.googleusercontent.com&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcalendar.readonly&state=ou7Gg66QivLs0KKdSwi2Na5t0dhywC&access_type=offline&prompt=consent",
+            "state": "ou7Gg66QivLs0KKdSwi2Na5t0dhywC",
+            "tokenEndpointAuthMethod": "client_secret_basic"
+          }
+        },
+        "credentialKey": "adk_oauth2_c1f06db5bf8650a2_oauth2_c20491b37d533b3e"
+      }
+    },
+    "requestedToolConfirmations": {}
+  },
+  "id": "6ed89a4c-95de-4b8a-89e4-9ab41880fe63",
+  "timestamp": 1775660326.421661
+}
+
+// [5/8] agent → client   SSE chunk  (async_stream_query format)
+// LLM natural-language reply: 'I need to authenticate...'
+// This is the last SSE chunk of Phase 1. The stream closes here.
+// The client now has the auth URL and waits for the user to complete
+// the browser OAuth flow before opening a new streamQuery call.
+//
+// SSE wire frame:
+//   data: {"modelVersion":"gemini-2.0-flash","content":{"parts":[{"text":"I need to authenticate to access your Google Calendar. P...
+//   (followed by \n\n)
+{
+  "modelVersion": "gemini-2.0-flash",
+  "content": {
+    "parts": [
+      {
+        "text": "I need to authenticate to access your Google Calendar. Please authenticate.\n"
+      }
+    ],
+    "role": "model"
+  },
+  "finishReason": "STOP",
+  "usageMetadata": {
+    "candidatesTokenCount": 14,
+    "candidatesTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 14
+      }
+    ],
+    "promptTokenCount": 77,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 77
+      }
+    ],
+    "totalTokenCount": 91,
+    "trafficType": "ON_DEMAND"
+  },
+  "avgLogprobs": -0.4562781538282122,
+  "invocationId": "e-3ee9bd76-072e-4371-8c3a-95ae66c2bfca",
+  "author": "calendar_agent",
+  "actions": {
+    "stateDelta": {},
+    "artifactDelta": {},
+    "requestedAuthConfigs": {},
+    "requestedToolConfirmations": {}
+  },
+  "id": "3737bab4-6494-4cba-951d-b8235ff9a4b0",
+  "timestamp": 1775660326.423115
+}
+
+// ════════════════════════════════════════════════════════════
+// PHASE 2 — Client returns the OAuth callback URL
+// ════════════════════════════════════════════════════════════
+//
+// [6/8] client → Agent Engine   HTTP POST  (new streamQuery call)
+// POST https://us-central1-aiplatform.googleapis.com/v1/projects/mmontan-ml-dev/locations/us-central1/reasoningEngines/<your-engine-id>:streamQuery?alt=sse
+// Content-Type: application/json
+// Authorization: Bearer <gcloud-token>
+//
+// session_id MUST match the one from Phase 1 so Agent Engine can
+// resume the same session. The message is a Content dict whose
+// single part is a FunctionResponse named `adk_request_credential`.
+// Its `id` must equal the longRunningToolId from event [3/8].
+// Agent Engine will exchange the auth code for a token, store it
+// in session state, then automatically retry list_calendar_events.
+{
+  "classMethod": "async_stream_query",
+  "input": {
+    "message": {
+      "parts": [
+        {
+          "functionResponse": {
+            "id": "adk-7ee82c71-7293-4184-b78b-baf64b36a3fe",
+            "name": "adk_request_credential",
+            "response": {
+              "auth_scheme": {
+                "type_": "oauth2",
+                "flows": {
+                  "authorizationCode": {
+                    "scopes": {
+                      "https://www.googleapis.com/auth/calendar.readonly": "Read Google Calendar"
+                    },
+                    "authorizationUrl": "https://accounts.google.com/o/oauth2/auth",
+                    "tokenUrl": "https://oauth2.googleapis.com/token"
+                  }
+                }
+              },
+              "raw_auth_credential": {
+                "auth_type": "oauth2",
+                "oauth2": {
+                  "client_id": "<redacted>",
+                  "client_secret": "<redacted>",
+                  "token_endpoint_auth_method": "client_secret_basic"
+                }
+              },
+              "exchanged_auth_credential": {
+                "auth_type": "oauth2",
+                "oauth2": {
+                  "client_id": "<redacted>",
+                  "client_secret": "<redacted>",
+                  "auth_uri": "https://accounts.google.com/o/oauth2/auth?response_type=code&client_id=158296564676-2ebaojinqlb6epvkorooct9uk0ains66.apps.googleusercontent.com&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcalendar.readonly&state=ou7Gg66QivLs0KKdSwi2Na5t0dhywC&access_type=offline&prompt=consent",
+                  "state": "ou7Gg66QivLs0KKdSwi2Na5t0dhywC",
+                  "redirect_uri": "http://localhost:8080/callback",
+                  "auth_response_uri": "http://localhost:8080/callback?code=4%2F0demo-auth-code-replace-with-real&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcalendar.readonly&state=ou7Gg66QivLs0KKdSwi2Na5t0dhywC",
+                  "token_endpoint_auth_method": "client_secret_basic"
+                }
+              },
+              "credential_key": "adk_oauth2_c1f06db5bf8650a2_oauth2_c20491b37d533b3e"
+            }
+          }
+        }
+      ],
+      "role": "user"
+    },
+    "user_id": "demo_user",
+    "session_id": "160c31dc-585e-4423-b039-7f13e32037ef"
+  }
+}
+
+// [7/8] agent → client   SSE chunk  (async_stream_query format)
+// Tool FunctionResponse after the token exchange. In a real deployment
+// this contains the calendar data; here it shows {status: authenticated}.
+//
+// SSE wire frame:
+//   data: {"content":{"parts":[{"functionResponse":{"id":"adk-8089f155-df00-4c05-b9fc-c1cdf693710d","name":"list_calendar_events",...
+//   (followed by \n\n)
+{
+  "content": {
+    "parts": [
+      {
+        "functionResponse": {
+          "id": "adk-8089f155-df00-4c05-b9fc-c1cdf693710d",
+          "name": "list_calendar_events",
+          "response": {
+            "status": "authenticated",
+            "message": "Credentials received. Would call Google Calendar API here.",
+            "access_token_preview": "(unavailable)"
+          }
+        }
+      }
+    ],
+    "role": "user"
+  },
+  "invocationId": "e-a71eb937-9626-433b-b664-7d7817d067f2",
+  "author": "calendar_agent",
+  "actions": {
+    "stateDelta": {},
+    "artifactDelta": {},
+    "requestedAuthConfigs": {},
+    "requestedToolConfirmations": {}
+  },
+  "id": "fa3e8d6f-86bf-4ea5-9b70-8893eb26ee66",
+  "timestamp": 1775660327.6266859
+}
+
+// [8/8] agent → client   SSE chunk  (async_stream_query format)
+// LLM final reply summarising the tool result.
+// This is the last SSE chunk; the stream closes.
+//
+// SSE wire frame:
+//   data: {"modelVersion":"gemini-2.0-flash","content":{"parts":[{"text":"OK. I received your credentials and would call the Googl...
+//   (followed by \n\n)
+{
+  "modelVersion": "gemini-2.0-flash",
+  "content": {
+    "parts": [
+      {
+        "text": "OK. I received your credentials and would call the Google Calendar API to list your upcoming events. Since I'm in a sandbox, I can't actually call the API.\n"
+      }
+    ],
+    "role": "model"
+  },
+  "finishReason": "STOP",
+  "usageMetadata": {
+    "candidatesTokenCount": 37,
+    "candidatesTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 37
+      }
+    ],
+    "promptTokenCount": 91,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 91
+      }
+    ],
+    "totalTokenCount": 128,
+    "trafficType": "ON_DEMAND"
+  },
+  "avgLogprobs": -0.10458314096605456,
+  "invocationId": "e-a71eb937-9626-433b-b664-7d7817d067f2",
+  "author": "calendar_agent",
+  "actions": {
+    "stateDelta": {},
+    "artifactDelta": {},
+    "requestedAuthConfigs": {},
+    "requestedToolConfirmations": {}
+  },
+  "id": "93d080ca-4526-4198-94ef-318fab1fe04e",
+  "timestamp": 1775660327.627609
+}
+
+// ════════════════════════════════════════════════════════════
+// APPENDIX — streaming_agent_run_with_events wire format
+// ════════════════════════════════════════════════════════════
+//
+// streaming_agent_run_with_events is the lower-level method used
+// by AgentSpace. Its SSE chunks wrap each event in an envelope:
+//   {"events": [<event>], "artifacts": [], "session_id": "..."}
+//
+// The request body is different too — it takes a JSON-encoded string:
+//   {"classMethod": "streaming_agent_run_with_events",
+//    "input": {"request_json": "{...}"}}
+//
+// Example: event [3/8] (adk_request_credential) in this format:
+{
+  "events": [
+    {
+      "content": {
+        "parts": [
+          {
+            "functionCall": {
+              "id": "adk-7ee82c71-7293-4184-b78b-baf64b36a3fe",
+              "args": {
+                "functionCallId": "adk-8089f155-df00-4c05-b9fc-c1cdf693710d",
+                "authConfig": {
+                  "authScheme": {
+                    "type": "oauth2",
+                    "flows": {
+                      "authorizationCode": {
+                        "scopes": {
+                          "https://www.googleapis.com/auth/calendar.readonly": "Read Google Calendar"
+                        },
+                        "authorizationUrl": "https://accounts.google.com/o/oauth2/auth",
+                        "tokenUrl": "https://oauth2.googleapis.com/token"
+                      }
+                    }
+                  },
+                  "rawAuthCredential": {
+                    "authType": "oauth2",
+                    "oauth2": {
+                      "clientId": "<redacted>",
+                      "clientSecret": "<redacted>",
+                      "tokenEndpointAuthMethod": "client_secret_basic"
+                    }
+                  },
+                  "exchangedAuthCredential": {
+                    "authType": "oauth2",
+                    "oauth2": {
+                      "clientId": "<redacted>",
+                      "clientSecret": "<redacted>",
+                      "authUri": "https://accounts.google.com/o/oauth2/auth?response_type=code&client_id=158296564676-2ebaojinqlb6epvkorooct9uk0ains66.apps.googleusercontent.com&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcalendar.readonly&state=ou7Gg66QivLs0KKdSwi2Na5t0dhywC&access_type=offline&prompt=consent",
+                      "state": "ou7Gg66QivLs0KKdSwi2Na5t0dhywC",
+                      "tokenEndpointAuthMethod": "client_secret_basic"
+                    }
+                  },
+                  "credentialKey": "adk_oauth2_c1f06db5bf8650a2_oauth2_c20491b37d533b3e"
+                }
+              },
+              "name": "adk_request_credential"
+            }
+          }
+        ],
+        "role": "user"
+      },
+      "invocationId": "e-3ee9bd76-072e-4371-8c3a-95ae66c2bfca",
+      "author": "calendar_agent",
+      "actions": {
+        "stateDelta": {},
+        "artifactDelta": {},
+        "requestedAuthConfigs": {},
+        "requestedToolConfirmations": {}
+      },
+      "longRunningToolIds": [
+        "adk-7ee82c71-7293-4184-b78b-baf64b36a3fe"
+      ],
+      "id": "831c5018-53a5-4114-9e03-7080b18870b9",
+      "timestamp": 1775660326.421936
+    }
+  ],
+  "artifacts": [],
+  "session_id": "160c31dc-585e-4423-b039-7f13e32037ef"
+}
