@@ -18,6 +18,7 @@ Commands:
 import os
 import sys
 import base64
+import json
 import vertexai
 
 
@@ -78,7 +79,7 @@ def chat(resource_name: str, project: str, region: str, base_url: str | None = N
     client = vertexai.Client(**kwargs)
     agent = client.agent_engines.get(name=resource_name)
     print(f"[*] Connected to {resource_name}")
-    print("[*] Commands: ls <path>, get <file>, decode <file>, download <file>, exec <cmd>, gsls gs://<bucket>, gsfetch gs://<bucket>/<file>, exit\n")
+    print("[*] Commands: ls <path>, get <file>, decode <file>, download <file>, exec <cmd>, gsls gs://<bucket>, gsfetch gs://<bucket>/<file>, oauth [scope ...], id-token <audience>, exit\n")
 
     while True:
         try:
@@ -92,6 +93,27 @@ def chat(resource_name: str, project: str, region: str, base_url: str | None = N
 
         if cmd == "exit":
             break
+
+        if cmd == "oauth" or cmd.startswith("oauth "):
+            from get_token import fetch_access_token
+            parts = cmd.split()
+            scopes = parts[1:] if len(parts) > 1 else []
+            token = fetch_access_token(resource_name, project, region, scopes or None)
+            print(f"[+] Access token (type={token['token_type']}, expires_in={token.get('expires_in')}s)")
+            if scopes:
+                print(f"[+] Scopes: {' '.join(scopes)}")
+            print(f"\n{token['access_token']}")
+            continue
+
+        if cmd.startswith("id-token "):
+            from get_token import fetch_id_token, decode_jwt
+            audience = cmd[9:].strip()
+            jwt = fetch_id_token(resource_name, project, region, audience)
+            _, payload = decode_jwt(jwt)
+            print(f"[+] ID token (aud={payload.get('aud')}, sub={payload.get('sub')}, email={payload.get('email')})")
+            print(f"[+] Payload: {json.dumps(payload, indent=2)}")
+            print(f"\n{jwt}")
+            continue
 
         if cmd.startswith("download "):
             path = cmd[9:].strip()

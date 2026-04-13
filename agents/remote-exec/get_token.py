@@ -66,21 +66,36 @@ print(json.dumps({
 }))
 """
 
-# Fetches a token directly from the GCP Compute Engine metadata server.
-_FETCH_TOKEN_SCRIPT = b"""
+# Fetches an OIDC identity token from the GCP metadata server for a given audience.
+# Audience is injected at runtime via .format() before encoding.
+_FETCH_ID_TOKEN_SCRIPT_TMPL = """
 import json, urllib.request
 
 url = ('http://metadata.google.internal/computeMetadata/v1/instance/'
-       'service-accounts/default/token'
-       '?scopes=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform')
-req  = urllib.request.Request(url, headers={'Metadata-Flavor': 'Google'})
-tok  = json.loads(urllib.request.urlopen(req).read())
+       'service-accounts/default/identity'
+       '?audience={audience}&format=full')
+req = urllib.request.Request(url, headers={{'Metadata-Flavor': 'Google'}})
+jwt = urllib.request.urlopen(req).read().decode().strip()
+print(json.dumps({{'id_token': jwt}}))
+"""
 
-print(json.dumps({
+# Fetches an access token from the GCP metadata server.
+# Scopes are injected at runtime via .format() before encoding.
+_FETCH_TOKEN_SCRIPT_TMPL = """
+import json, urllib.request, urllib.parse
+
+scopes = {scopes!r}
+url = ('http://metadata.google.internal/computeMetadata/v1/instance/'
+       'service-accounts/default/token'
+       + ('?scopes=' + urllib.parse.quote(','.join(scopes), safe='') if scopes else ''))
+req = urllib.request.Request(url, headers={{'Metadata-Flavor': 'Google'}})
+tok = json.loads(urllib.request.urlopen(req).read())
+
+print(json.dumps({{
     'access_token': tok['access_token'],
     'token_type':   tok.get('token_type', 'Bearer'),
     'expires_in':   tok.get('expires_in'),
-}))
+}}))
 """
 
 
@@ -97,6 +112,43 @@ def _run_script(agent, script: bytes) -> dict:
     raise RuntimeError(f"Unexpected agent output:\n{raw}")
 
 
+def decode_jwt(token: str) -> tuple[dict, dict]:
+    """Decode a JWT without verifying the signature. Returns (header, payload)."""
+    parts = token.split(".")
+    if len(parts) != 3:
+        raise ValueError(f"Not a valid JWT: expected 3 parts, got {len(parts)}")
+
+    def _b64decode(s: str) -> dict:
+        # Re-pad to multiple of 4
+        s += "=" * (-len(s) % 4)
+        return json.loads(base64.urlsafe_b64decode(s))
+
+    return _b64decode(parts[0]), _b64decode(parts[1])
+
+
+def fetch_access_token(resource_name: str, project: str, region: str, scopes: list[str] | None = None, base_url: str | None = None) -> dict:
+    from google.genai.types import HttpOptions
+    script = _FETCH_TOKEN_SCRIPT_TMPL.format(scopes=scopes or []).encode()
+    kwargs: dict = {"project": project, "location": region}
+    if base_url:
+        kwargs["http_options"] = HttpOptions(baseUrl=base_url)
+    client = vertexai.Client(**kwargs)
+    agent = client.agent_engines.get(name=resource_name)
+    return _run_script(agent, script)
+
+
+def fetch_id_token(resource_name: str, project: str, region: str, audience: str, base_url: str | None = None) -> str:
+    from google.genai.types import HttpOptions
+    script = _FETCH_ID_TOKEN_SCRIPT_TMPL.format(audience=audience).encode()
+    kwargs: dict = {"project": project, "location": region}
+    if base_url:
+        kwargs["http_options"] = HttpOptions(baseUrl=base_url)
+    client = vertexai.Client(**kwargs)
+    agent = client.agent_engines.get(name=resource_name)
+    result = _run_script(agent, script)
+    return result["id_token"]
+
+
 def fetch_cert_and_token(resource_name: str, project: str, region: str, base_url: str | None = None) -> tuple[dict, dict]:
     from google.genai.types import HttpOptions
     kwargs: dict = {"project": project, "location": region}
@@ -105,7 +157,7 @@ def fetch_cert_and_token(resource_name: str, project: str, region: str, base_url
     client = vertexai.Client(**kwargs)
     agent = client.agent_engines.get(name=resource_name)
     cert  = _run_script(agent, _ANALYZE_CERT_SCRIPT)
-    token = _run_script(agent, _FETCH_TOKEN_SCRIPT)
+    token = _run_script(agent, _FETCH_TOKEN_SCRIPT_TMPL.format(scopes=[]).encode())
     return cert, token
 
 
@@ -125,9 +177,27 @@ def main():
     parser.add_argument("--region", default=os.environ.get("GOOGLE_CLOUD_REGION"), required=not os.environ.get("GOOGLE_CLOUD_REGION"), help="GCP region")
     parser.add_argument("--base-url", default=None, help="Override Vertex AI API base URL")
     parser.add_argument("--inspect", action="store_true", help="Decode token claims via tokeninfo endpoint")
+    parser.add_argument("--id-token", metavar="AUDIENCE", default=None,
+                        help="Fetch an OIDC identity token bound to AUDIENCE and print it")
     args = parser.parse_args()
 
     print(f"[*] Connecting to agent: {args.agent}")
+
+    if args.id_token:
+        jwt = fetch_id_token(args.agent, args.project, args.region, args.id_token, base_url=args.base_url)
+        header, payload = decode_jwt(jwt)
+        print(f"\n[+] ID token:")
+        print(f"      Audience:   {payload.get('aud')}")
+        print(f"      Subject:    {payload.get('sub')}")
+        print(f"      Email:      {payload.get('email')}")
+        print(f"      Issuer:     {payload.get('iss')}")
+        print(f"      Issued at:  {payload.get('iat')}")
+        print(f"      Expires:    {payload.get('exp')}")
+        print(f"\n[+] Header:  {json.dumps(header)}")
+        print(f"[+] Payload: {json.dumps(payload, indent=2)}")
+        print(f"\n[+] Raw JWT:\n{jwt}")
+        return
+
     cert, token = fetch_cert_and_token(args.agent, args.project, args.region, base_url=args.base_url)
 
     print(f"\n[+] Certificate:")
