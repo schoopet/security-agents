@@ -33,11 +33,12 @@ Agent commands (forwarded verbatim, or with "." expanded to --use value):
 
 import base64
 import json
+import os
 import sys
 import vertexai
 
-PROJECT_ID = "mmontan-ml-dev"
-LOCATION = "us-central1"
+PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT")
+LOCATION   = os.environ.get("GOOGLE_CLOUD_LOCATION")
 
 # Commands that take an engine resource name as their first argument.
 # The client replaces "." with the current --use value.
@@ -156,5 +157,11 @@ if __name__ == "__main__":
         sys.exit(1)
     _resource = _args[0]
     if "/" not in _resource:
+        if not _project or not _location:
+            print(
+                "ERROR: project and location are required to expand a numeric resource ID.\n"
+                "Pass --project / --location or set GOOGLE_CLOUD_PROJECT / GOOGLE_CLOUD_LOCATION."
+            )
+            sys.exit(1)
         _resource = f"projects/{_project}/locations/{_location}/reasoningEngines/{_resource}"
     chat(_resource, project=_project, location=_location, base_url=_base_url)

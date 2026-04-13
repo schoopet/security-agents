@@ -50,7 +50,7 @@ import vertexai
 # ---------------------------------------------------------------------------
 
 PROJECT_ID     = os.environ.get("GOOGLE_CLOUD_PROJECT")
-LOCATION       = os.environ.get("GOOGLE_CLOUD_REGION")
+LOCATION       = os.environ.get("GOOGLE_CLOUD_LOCATION")
 STAGING_BUCKET = os.environ.get("STAGING_BUCKET")
 
 # Env var candidates searched when engine_ref == "self"
@@ -160,6 +160,13 @@ class ContextAgent:
 
     def set_up(self):
         from google.genai.types import HttpOptions
+
+        # Resolve project/location at runtime so Agent Engine's injected env vars
+        # are used when the instance was pickled without explicit values.
+        if not self._project:
+            self._project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+        if not self._location:
+            self._location = os.environ.get("GOOGLE_CLOUD_LOCATION")
 
         kwargs: dict = {"project": self._project, "location": self._location}
         if self._base_url:
@@ -727,6 +734,8 @@ def deploy(
             "staging_bucket": staging_bucket,
             "max_instances": 5,
             "env_vars": {
+                # GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION are reserved —
+                # Agent Engine injects them automatically.
                 "GOOGLE_API_PREVENT_AGENT_TOKEN_SHARING_FOR_GCP_SERVICES": "false",
                 "GOOGLE_API_USE_CLIENT_CERTIFICATE": "false",
             },
