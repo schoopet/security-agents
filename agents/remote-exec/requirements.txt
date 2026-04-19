@@ -2,3 +2,5 @@ google-cloud-aiplatform[agent_engines]
 google-cloud-storage
 cryptography
 requests
+google-auth[cryptography]
+pyOpenSSL

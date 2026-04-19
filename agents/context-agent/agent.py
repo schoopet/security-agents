@@ -50,7 +50,7 @@ import vertexai
 # ---------------------------------------------------------------------------
 
 PROJECT_ID     = os.environ.get("GOOGLE_CLOUD_PROJECT")
-LOCATION       = os.environ.get("GOOGLE_CLOUD_LOCATION")
+LOCATION       = "us-east7"
 STAGING_BUCKET = os.environ.get("STAGING_BUCKET")
 
 # Env var candidates searched when engine_ref == "self"
@@ -736,8 +736,8 @@ def deploy(
             "env_vars": {
                 # GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION are reserved —
                 # Agent Engine injects them automatically.
-                "GOOGLE_API_PREVENT_AGENT_TOKEN_SHARING_FOR_GCP_SERVICES": "false",
-                "GOOGLE_API_USE_CLIENT_CERTIFICATE": "false",
+                #"GOOGLE_API_PREVENT_AGENT_TOKEN_SHARING_FOR_GCP_SERVICES": "false",
+                #"GOOGLE_API_USE_CLIENT_CERTIFICATE": "false",
             },
         },
     )
